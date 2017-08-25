@@ -1,0 +1,12 @@
+*.swp
+
+# vim plugins
+vim/.vim/plugged/
+
+# tmux plugins
+!tmux/.tmux/plugins
+tmux/.tmux/plugins/*
+!tmux/.tmux/plugins/tpm/
+
+tmux/.tmux/resurrect/
+
