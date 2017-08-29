@@ -1,50 +1,64 @@
+set nocompatible
+filetype off
+
+" vim-plug
 " Specify plugin directory
 call plug#begin('~/.vim/plugged')
 
-Plug 'chriskempson/base16-vim'
-Plug 'https://github.com/ctrlpvim/ctrlp.vim.git'
-Plug 'scrooloose/syntastic'
-Plug 'scrooloose/nerdtree'
-Plug 'scrooloose/nerdcommenter'
 Plug 'tpope/vim-sensible'
-Plug 'tpope/vim-fugitive'
+Plug 'chriskempson/base16-vim'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
-Plug 'jiangmiao/auto-pairs'
-Plug 'def-lkb/ocp-indent-vim'
+
+Plug 'mileszs/ack.vim'
+Plug 'ctrlpvim/ctrlp.vim'
+Plug 'tpope/vim-fugitive'
 Plug 'jeetsukumaran/vim-buffergator'
+Plug 'scrooloose/nerdtree', {'on': 'NERDTreeToggle'}
+
+Plug 'scrooloose/nerdcommenter'
+Plug 'jiangmiao/auto-pairs'
+Plug 'def-lkb/ocp-indent-vim', {'for': 'ocaml'}
+Plug 'scrooloose/syntastic'
+Plug 'Valloric/YouCompleteMe'
 
 " Initialize plugin system
 call plug#end()
 
-" System Settings
-set nocompatible
+" #### vim general settings
+filetype plugin indent on
 set encoding=utf-8
 set hidden
-filetype plugin indent on
 set shell=/bin/bash
 set wildmenu
 set wildmode=list:longest
 set visualbell
 set ttyfast
 set noundofile
-set mouse=a
+au FocusLost * :wa
 
 " Visual Settings
 syntax on
-set showcmd
-set showmode
-set laststatus=2
-set number
-set wrap
-set scrolloff=3
 if filereadable(expand("~/.vimrc_background"))
   let base16colorspace=256
   source ~/.vimrc_background
 endif
+set showcmd
+set laststatus=2
+set number
+set relativenumber
+set cursorline
+set scrolloff=1
+
+set wrap
+set formatoptions=qrn1
+set colorcolumn=85
+
+set listchars=trail:~
+set list
 
 " Text editing settings
-set formatoptions=qrn1
+set mouse=a
 set backspace=indent,eol,start
 set autoindent
 set copyindent
@@ -53,21 +67,22 @@ set softtabstop=4
 set tabstop=4
 set expandtab
 
-" Search settings
-nnoremap / /\v
-vnoremap / /\v
-set ignorecase
-set smartcase
-set showmatch
-set hlsearch
-set incsearch
-nnoremap <esc> :noh<return><esc>
-
-"Keyboard Remappings
+" General keyboard remappings
+let mapleader = ","
 nnoremap ; :
 inoremap jk <ESC>
-let mapleader = ","
+nnoremap <leader>vs :source ~/.vimrc<CR>
 
+" Windows and tabs
+nnoremap <leader><C-n> :tabnew<CR>
+nnoremap <leader>wv <C-w>v <C-w>l
+nnoremap <leader>ws <C-w>s <C-w>j
+nnoremap <leader>h <C-w>h
+nnoremap <leader>j <C-w>j
+nnoremap <leader>k <C-w>k
+nnoremap <leader>l <C-w>l
+
+" Emacs like start/end of line
 nnoremap <C-A> ^
 inoremap <C-A> <esc>^a
 vnoremap <C-A> ^
@@ -75,19 +90,34 @@ nnoremap <C-E> $
 inoremap <C-E> <esc>$a
 vnoremap <C-E> $
 
-nnoremap <leader><C-Y> "+yy
-vnoremap <leader><C-Y> "+y
-nnoremap <leader><C-P> "+p
+" System clipboard
+nnoremap <C-c> "+yy
+vnoremap <C-c> "+y
+nnoremap <leader>p "+p
 
-nmap <leader>S :source ~/.vimrc<CR>
-nmap <leader>nt :NERDTreeToggle<CR>
-nmap <leader>me :MerlinErrorCheck<CR>
+" Search settings
+nnoremap / /\v
+vnoremap / /\v
+nnoremap <silent> <leader><space> :noh<CR>
+set ignorecase
+set smartcase
+set showmatch
+set hlsearch
+set incsearch
+nnoremap \ :%s/
+nnoremap <Leader>rtw :%s/\s\+$//e<CR>
+
+" #### plugins
+
+" ack.vim
+let g:ackprg = 'ag --vimgrep'
 
 " base16
 let base16colorspace=256  " Access colors present in 256 colorspace
 
 " NERDTree
 let NERDTreeShowHidden = 1
+nnoremap <leader>nt :NERDTreeToggle<CR>
 
 " airline
 let g:airline_powerline_fonts = 1
@@ -95,14 +125,33 @@ let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
 
 " syntastic
+nnoremap <leader>se :SyntasticCheck<CR>:Errors<CR>
+nnoremap <silent> <leader>sc :lclose<CR>
 set statusline+=%#warningmsg#
 set statusline+=%{SyntasticStatuslineFlag()}
 set statusline+=%*
-let g:syntastic_always_populate_loc_list = 1
-let g:syntastic_auto_loc_list = 1
 let g:syntastic_check_on_open = 1
 let g:syntastic_check_on_wq = 0
+let g:syntastic_always_populate_loc_list = 1
+let g:syntastic_auto_loc_list = 2
+let g:syntastic_loc_list_height = 5
 let g:syntastic_ocaml_checkers = ['merlin']
+
+" YCM
+let g:ycm_min_num_of_chars_for_completion = 2
+let g:ycm_semantic_triggers =  {
+  \   'c' : ['->', '.'],
+  \   'objc' : ['->', '.', 're!\[[_a-zA-Z]+\w*\s', 're!^\s*[^\W\d]\w*\s',
+  \             're!\[.*\]\s'],
+  \   'ocaml' : ['.', '#', 're![^\s]+'],
+  \   'cpp,objcpp' : ['->', '.', '::'],
+  \   'perl' : ['->'],
+  \   'php' : ['->', '::'],
+  \   'cs,java,javascript,typescript,d,python,perl6,scala,vb,elixir,go' : ['.'],
+  \   'ruby' : ['.', '::'],
+  \   'lua' : ['.', ':'],
+  \   'erlang' : [':'],
+  \ }
 
 " Fixing arrow keys for tmux
 map OD <Left>
@@ -114,8 +163,12 @@ map [1;2A <S-Up>
 map [1;2C <S-Right>
 map [1;2B <S-Down>
 
-" Autosave
-au FocusLost * :wa
+
+" #### OCaml
+nnoremap <leader>me :MerlinErrorCheck<CR>
+autocmd FileType ocaml setl sw=2 sts=2 ts=2 et
+
+set rtp+=~/.vim/plugged/ocp-indent-vim
 
 " ## added by OPAM user-setup for vim / base ## 93ee63e278bdfc07d1139a748ed3fff2 ## you can edit, but keep this line
 let s:opam_share_dir = system("opam config var share")
@@ -155,3 +208,4 @@ if count(s:opam_available_tools,"ocp-indent") == 0
   source "/home/ray_zeng/.opam/4.05.0/share/vim/syntax/ocp-indent.vim"
 endif
 " ## end of OPAM user-setup addition for vim / ocp-indent ## keep this line
+

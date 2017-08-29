@@ -2,7 +2,7 @@
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # Path to your oh-my-zsh installation.
-  export ZSH=/home/ray_zeng/.oh-my-zsh
+export ZSH=/home/ray_zeng/.oh-my-zsh
 
 # Set name of the theme to load. Optionally, if you set this to "random"
 # it'll load a random theme each time that oh-my-zsh is loaded.
@@ -86,13 +86,13 @@ source $ZSH/oh-my-zsh.sh
 
 [[ -e ~/.shell_aliases ]] && source ~/.shell_aliases
 
-[[ -e ~/.profile ]] && emulate sh -c 'source ~/.profile'
-
 BASE16_SHELL=$HOME/.config/base16-shell/
 [ -n "$PS1"  ] && [ -s $BASE16_SHELL/profile_helper.sh  ] && eval "$($BASE16_SHELL/profile_helper.sh)"
 
 # OPAM configuration
 . /home/ray_zeng/.opam/opam-init/init.zsh > /dev/null 2> /dev/null || true
+
+#[[ -e ~/.profile ]] && emulate sh -c 'source ~/.profile'
 
 prompt_context(){}
 
