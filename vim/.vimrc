@@ -25,6 +25,7 @@ Plug 'Valloric/YouCompleteMe'
 " Initialize plugin system
 call plug#end()
 
+
 " #### vim general settings
 filetype plugin indent on
 set encoding=utf-8
@@ -47,7 +48,7 @@ set showcmd
 set laststatus=2
 set number
 set relativenumber
-set cursorline
+"set cursorline
 set scrolloff=1
 
 set wrap
@@ -71,10 +72,16 @@ set expandtab
 let mapleader = ","
 nnoremap ; :
 inoremap jk <ESC>
+
+" Config editing
 nnoremap <leader>vs :source ~/.vimrc<CR>
+nnoremap <leader>ve :tabnew ~/.vimrc<CR>
+autocmd FileType shell_aliases set syntax=sh
 
 " Windows and tabs
-nnoremap <leader><C-n> :tabnew<CR>
+nnoremap <leader><C-t> :tabnew<CR>
+nnoremap <leader><C-n> :enew<CR>
+nnoremap <leader>wq :w<CR>:bd<CR>
 nnoremap <leader>wv <C-w>v <C-w>l
 nnoremap <leader>ws <C-w>s <C-w>j
 nnoremap <leader>h <C-w>h
@@ -107,13 +114,11 @@ set incsearch
 nnoremap \ :%s/
 nnoremap <Leader>rtw :%s/\s\+$//e<CR>
 
+
 " #### plugins
 
 " ack.vim
 let g:ackprg = 'ag --vimgrep'
-
-" base16
-let base16colorspace=256  " Access colors present in 256 colorspace
 
 " NERDTree
 let NERDTreeShowHidden = 1
@@ -130,12 +135,15 @@ nnoremap <silent> <leader>sc :lclose<CR>
 set statusline+=%#warningmsg#
 set statusline+=%{SyntasticStatuslineFlag()}
 set statusline+=%*
-let g:syntastic_check_on_open = 1
+let g:syntastic_check_on_open = 0
 let g:syntastic_check_on_wq = 0
 let g:syntastic_always_populate_loc_list = 1
 let g:syntastic_auto_loc_list = 2
 let g:syntastic_loc_list_height = 5
 let g:syntastic_ocaml_checkers = ['merlin']
+
+let g:syntastic_python_flake8_exec = '/usr/local/bin/flake8'
+let g:syntastic_python_checkers = ['pyflakes', 'python3']
 
 " YCM
 let g:ycm_min_num_of_chars_for_completion = 2
@@ -152,6 +160,8 @@ let g:ycm_semantic_triggers =  {
   \   'lua' : ['.', ':'],
   \   'erlang' : [':'],
   \ }
+let g:ycm_key_invoke_completion = '<C-k>'
+let g:ycm_python_binary_path = '/usr/bin/python'
 
 " Fixing arrow keys for tmux
 map OD <Left>
@@ -164,7 +174,9 @@ map [1;2C <S-Right>
 map [1;2B <S-Down>
 
 
-" #### OCaml
+" #### Language specific settings
+
+" OCaml
 nnoremap <leader>me :MerlinErrorCheck<CR>
 autocmd FileType ocaml setl sw=2 sts=2 ts=2 et
 
