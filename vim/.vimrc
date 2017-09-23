@@ -143,7 +143,7 @@ let g:syntastic_auto_loc_list = 2
 let g:syntastic_loc_list_height = 5
 let g:syntastic_ocaml_checkers = ['merlin']
 
-let g:syntastic_python_flake8_exec = '/usr/local/bin/flake8'
+"let g:syntastic_python_flake8_exec = '/usr/local/bin/flake8'
 let g:syntastic_python_checkers = ['pyflakes', 'python3']
 
 " YCM
@@ -164,7 +164,7 @@ let g:ycm_semantic_triggers =  {
   \ }
 let g:ycm_key_invoke_completion = '<C-k>'
 let g:ycm_key_list_stop_completion = ['<C-y>']
-let g:ycm_python_binary_path = '/usr/bin/python'
+"let g:ycm_python_binary_path = '/usr/bin/python'
 
 " Fixing arrow keys for tmux
 map OD <Left>
