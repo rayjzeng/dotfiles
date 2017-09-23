@@ -51,7 +51,7 @@ ZSH_THEME="agnoster"
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git python sublime tmux)
+plugins=(sudo debian git tmux python)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -84,14 +84,20 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
+# [[ -e ~/.profile ]] && emulate sh -c 'source ~/.profile'
+[[ -e ~/.shell_aliases ]] && source ~/.shell_aliases
+[[ -e ~/.sh_aliases ]] && source ~/.sh_aliases
+
 BASE16_SHELL=$HOME/.config/base16-shell/
 [ -n "$PS1"  ] && [ -s $BASE16_SHELL/profile_helper.sh  ] && eval "$($BASE16_SHELL/profile_helper.sh)"
 
 # OPAM configuration
 . /home/ray_zeng/.opam/opam-init/init.zsh > /dev/null 2> /dev/null || true
 
-# [[ -e ~/.profile ]] && emulate sh -c 'source ~/.profile'
-[[ -e ~/.shell_aliases ]] && source ~/.shell_aliases
-
-prompt_context(){}
-
+# Hide user@hostname
+DEFAULT_USER=`whoami`
+prompt_context() {
+  if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
+    prompt_segment black default "%(!.%{%F{yellow}%}.)$USER"
+  fi
+}

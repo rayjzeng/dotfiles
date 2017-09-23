@@ -77,6 +77,7 @@ inoremap jk <ESC>
 nnoremap <leader>vs :source ~/.vimrc<CR>
 nnoremap <leader>ve :tabnew ~/.vimrc<CR>
 autocmd FileType shell_aliases set syntax=sh
+autocmd FileType sh_aliases set syntax=sh
 
 " Windows and tabs
 nnoremap <leader><C-t> :tabnew<CR>
@@ -147,6 +148,7 @@ let g:syntastic_python_checkers = ['pyflakes', 'python3']
 
 " YCM
 let g:ycm_min_num_of_chars_for_completion = 2
+let g:ycm_autoclose_preview_window_after_completion = 1
 let g:ycm_semantic_triggers =  {
   \   'c' : ['->', '.'],
   \   'objc' : ['->', '.', 're!\[[_a-zA-Z]+\w*\s', 're!^\s*[^\W\d]\w*\s',
@@ -161,6 +163,7 @@ let g:ycm_semantic_triggers =  {
   \   'erlang' : [':'],
   \ }
 let g:ycm_key_invoke_completion = '<C-k>'
+let g:ycm_key_list_stop_completion = ['<C-y>']
 let g:ycm_python_binary_path = '/usr/bin/python'
 
 " Fixing arrow keys for tmux
