@@ -56,7 +56,7 @@ set formatoptions=qrn1
 set colorcolumn=85
 
 set listchars=trail:~
-set list
+"set list
 
 " Text editing settings
 set mouse=a
