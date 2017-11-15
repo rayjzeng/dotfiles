@@ -10,17 +10,16 @@ Plug 'chriskempson/base16-vim'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 
-Plug 'mileszs/ack.vim'
 Plug 'ctrlpvim/ctrlp.vim'
-Plug 'tpope/vim-fugitive'
 Plug 'jeetsukumaran/vim-buffergator'
 Plug 'scrooloose/nerdtree', {'on': 'NERDTreeToggle'}
 
-Plug 'scrooloose/nerdcommenter'
-Plug 'jiangmiao/auto-pairs'
-Plug 'def-lkb/ocp-indent-vim', {'for': 'ocaml'}
+Plug 'Raimondi/delimitMate'
+Plug 'tomtom/tcomment_vim'
+Plug 'osyo-manga/vim-over'
 Plug 'scrooloose/syntastic'
 Plug 'Valloric/YouCompleteMe'
+Plug 'let-def/ocp-indent-vim', {'for': 'ocaml'}
 
 " Initialize plugin system
 call plug#end()
@@ -74,8 +73,8 @@ nnoremap ; :
 inoremap jk <ESC>
 
 " Config editing
-nnoremap <leader>vs :source ~/.vimrc<CR>
-nnoremap <leader>ve :tabnew ~/.vimrc<CR>
+nnoremap <leader>rcs :source ~/.vimrc<CR>
+nnoremap <leader>rce :tabnew ~/.vimrc<CR>
 autocmd FileType shell_aliases set syntax=sh
 autocmd FileType sh_aliases set syntax=sh
 
@@ -83,47 +82,44 @@ autocmd FileType sh_aliases set syntax=sh
 nnoremap <leader><C-t> :tabnew<CR>
 nnoremap <leader><C-n> :enew<CR>
 nnoremap <leader>wq :w<CR>:bd<CR>
-nnoremap <leader>wv <C-w>v <C-w>l
-nnoremap <leader>ws <C-w>s <C-w>j
+nnoremap <leader>v <C-w>v <C-w>l
+nnoremap <leader>s <C-w>s <C-w>j
 nnoremap <leader>h <C-w>h
 nnoremap <leader>j <C-w>j
 nnoremap <leader>k <C-w>k
 nnoremap <leader>l <C-w>l
 
 " Emacs like start/end of line
-nnoremap <C-A> ^
+" nnoremap <C-A> ^
 inoremap <C-A> <esc>^a
-vnoremap <C-A> ^
-nnoremap <C-E> $
+" vnoremap <C-A> ^
+" nnoremap <C-E> $
 inoremap <C-E> <esc>$a
-vnoremap <C-E> $
+" vnoremap <C-E> $
 
 " System clipboard
-nnoremap <C-c> "+yy
-vnoremap <C-c> "+y
+nnoremap <leader>yy "+yy
+vnoremap <leader>y "+y
 nnoremap <leader>p "+p
 
 " Search settings
-nnoremap / /\v
+nnoremap / :OverCommandline<CR>/\v
 vnoremap / /\v
-nnoremap <silent> <leader><space> :noh<CR>
+nnoremap <silent> <leader>/ :noh<CR>
 set ignorecase
 set smartcase
 set showmatch
 set hlsearch
 set incsearch
-nnoremap \ :%s/
+nnoremap \ :OverCommandLine<CR>%s/
 nnoremap <Leader>rtw :%s/\s\+$//e<CR>
 
 
 " #### plugins
 
-" ack.vim
-let g:ackprg = 'ag --vimgrep'
-
 " NERDTree
 let NERDTreeShowHidden = 1
-nnoremap <leader>nt :NERDTreeToggle<CR>
+nnoremap <leader>n :NERDTreeToggle<CR>
 
 " airline
 let g:airline_powerline_fonts = 1
@@ -141,19 +137,18 @@ let g:syntastic_check_on_wq = 0
 let g:syntastic_always_populate_loc_list = 1
 let g:syntastic_auto_loc_list = 2
 let g:syntastic_loc_list_height = 5
-let g:syntastic_ocaml_checkers = ['merlin']
 
-"let g:syntastic_python_flake8_exec = '/usr/local/bin/flake8'
+let g:syntastic_ocaml_checkers = ['merlin']
 let g:syntastic_python_checkers = ['pyflakes', 'python3']
 
 " YCM
-let g:ycm_min_num_of_chars_for_completion = 2
+let g:ycm_min_num_of_chars_for_completion = 99
 let g:ycm_autoclose_preview_window_after_completion = 1
 let g:ycm_semantic_triggers =  {
   \   'c' : ['->', '.'],
   \   'objc' : ['->', '.', 're!\[[_a-zA-Z]+\w*\s', 're!^\s*[^\W\d]\w*\s',
   \             're!\[.*\]\s'],
-  \   'ocaml' : ['.', '#', 're![^\s]+'],
+  \   'ocaml' : ['.', '#'],
   \   'cpp,objcpp' : ['->', '.', '::'],
   \   'perl' : ['->'],
   \   'php' : ['->', '::'],
@@ -164,7 +159,7 @@ let g:ycm_semantic_triggers =  {
   \ }
 let g:ycm_key_invoke_completion = '<C-k>'
 let g:ycm_key_list_stop_completion = ['<C-y>']
-"let g:ycm_python_binary_path = '/usr/bin/python'
+let g:ycm_python_binary_path = 'python'
 
 " Fixing arrow keys for tmux
 map OD <Left>
@@ -216,11 +211,4 @@ for tool in s:opam_packages
     call s:opam_configuration[tool]()
   endif
 endfor
-
-" ## end of OPAM user-setup addition for vim / base ## keep this line
-" ## added by OPAM user-setup for vim / ocp-indent ## 5e0d7f0e8662d26d5d6eee52911401a8 ## you can edit, but keep this line
-if count(s:opam_available_tools,"ocp-indent") == 0
-  source "/home/ray_zeng/.opam/4.05.0/share/vim/syntax/ocp-indent.vim"
-endif
-" ## end of OPAM user-setup addition for vim / ocp-indent ## keep this line
 
