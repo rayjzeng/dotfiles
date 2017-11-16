@@ -103,7 +103,7 @@ vnoremap <leader>y "+y
 nnoremap <leader>p "+p
 
 " Search settings
-nnoremap / :OverCommandline<CR>/\v
+nnoremap / /\v
 vnoremap / /\v
 nnoremap <silent> <leader>/ :noh<CR>
 set ignorecase
