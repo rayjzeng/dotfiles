@@ -1,7 +1,10 @@
 *.swp
+*.swo
+*.swn
 
 # vim plugins
 vim/.vim/plugged/
+nvim/nvim/plugged/
 
 # tmux plugins
 !tmux/.tmux/plugins

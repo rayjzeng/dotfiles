@@ -1,9 +1,6 @@
 [submodule "tmux/.tmux/plugins/tpm"]
 	path = tmux/.tmux/plugins/tpm
 	url = https://github.com/tmux-plugins/tpm.git
-[submodule "vim/.vim/vim-plug"]
-	path = vim/.vim/vim-plug
-	url = https://github.com/junegunn/vim-plug.git
 [submodule "powerline-fonts"]
 	path = powerline-fonts
 	url = https://github.com/powerline/fonts.git
@@ -13,3 +10,6 @@
 [submodule "zsh/.zprezto"]
 	path = zsh/.zprezto
 	url = https://github.com/raisins2014/prezto
+[submodule "vim-plug"]
+	path = vim-plug
+	url = https://github.com/junegunn/vim-plug.git
