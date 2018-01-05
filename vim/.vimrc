@@ -1,25 +1,27 @@
 set nocompatible
-filetype off
+autocmd!
 
 " vim-plug
 " Specify plugin directory
 call plug#begin('~/.vim/plugged')
 
-Plug 'tpope/vim-sensible'
-Plug 'chriskempson/base16-vim'
-Plug 'vim-airline/vim-airline'
-Plug 'vim-airline/vim-airline-themes'
-
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'jeetsukumaran/vim-buffergator'
 Plug 'scrooloose/nerdtree', {'on': 'NERDTreeToggle'}
+Plug 'christoomey/vim-tmux-navigator'
 
 Plug 'Raimondi/delimitMate'
 Plug 'tomtom/tcomment_vim'
 Plug 'osyo-manga/vim-over'
+
+Plug 'tpope/vim-sensible'
+Plug 'vim-airline/vim-airline'
+Plug 'vim-airline/vim-airline-themes'
+Plug 'joshdick/onedark.vim'
+
+Plug 'sheerun/vim-polyglot'
 Plug 'scrooloose/syntastic'
 Plug 'Valloric/YouCompleteMe'
-Plug 'let-def/ocp-indent-vim', {'for': 'ocaml'}
 
 " Initialize plugin system
 call plug#end()
@@ -28,74 +30,60 @@ call plug#end()
 " #### vim general settings
 filetype plugin indent on
 set encoding=utf-8
-set hidden
-set shell=/bin/bash
+if executable("zsh")
+    set shell=/bin/zsh
+else
+    set shell=/bin/bash
+endif
 set wildmenu
 set wildmode=list:longest
 set visualbell
 set ttyfast
-set noundofile
-au FocusLost * :wa
 
 " Visual Settings
 syntax on
-if filereadable(expand("~/.vimrc_background"))
-  let base16colorspace=256
-  source ~/.vimrc_background
-endif
+colorscheme onedark
+let g:onedark_termcolors=16
 set showcmd
 set laststatus=2
-set number
-set relativenumber
-"set cursorline
-set scrolloff=1
 
-set wrap
-set formatoptions=qrn1
-set colorcolumn=85
+set number
+augroup numbering
+  autocmd!
+  autocmd InsertEnter * set norelativenumber
+  autocmd InsertLeave * set relativenumber
+augroup END
+set scrolloff=1
+set colorcolumn=80
 
 set listchars=trail:~
-"set list
+nnoremap <Leader>rtw :%s/\s\+$//e<CR>
 
-" Text editing settings
+set hidden
+set wrap
+set formatoptions=qrn1
 set mouse=a
 set backspace=indent,eol,start
 set autoindent
 set copyindent
-set shiftwidth=4
-set softtabstop=4
-set tabstop=4
-set expandtab
+set sw=4 sts=4 ts=4
 
 " General keyboard remappings
 let mapleader = ","
 nnoremap ; :
 inoremap jk <ESC>
 
-" Config editing
-nnoremap <leader>rcs :source ~/.vimrc<CR>
-nnoremap <leader>rce :tabnew ~/.vimrc<CR>
-autocmd FileType shell_aliases set syntax=sh
-autocmd FileType sh_aliases set syntax=sh
-
-" Windows and tabs
-nnoremap <leader><C-t> :tabnew<CR>
-nnoremap <leader><C-n> :enew<CR>
-nnoremap <leader>wq :w<CR>:bd<CR>
-nnoremap <leader>v <C-w>v <C-w>l
-nnoremap <leader>s <C-w>s <C-w>j
-nnoremap <leader>h <C-w>h
-nnoremap <leader>j <C-w>j
-nnoremap <leader>k <C-w>k
-nnoremap <leader>l <C-w>l
+" panes
+nnoremap <leader>d <C-w>v <C-w>l
+nnoremap <leader>D <C-w>s <C-w>j
 
 " Emacs like start/end of line
 " nnoremap <C-A> ^
 inoremap <C-A> <esc>^a
-" vnoremap <C-A> ^
+vnoremap <C-A> ^
 " nnoremap <C-E> $
 inoremap <C-E> <esc>$a
-" vnoremap <C-E> $
+vnoremap <C-E> $
 
 " System clipboard
 nnoremap <leader>yy "+yy
@@ -105,14 +93,32 @@ nnoremap <leader>p "+p
 " Search settings
 nnoremap / /\v
 vnoremap / /\v
-nnoremap <silent> <leader>/ :noh<CR>
+nnoremap <silent> <leader>h :noh<CR>
 set ignorecase
 set smartcase
 set showmatch
 set hlsearch
 set incsearch
 nnoremap \ :OverCommandLine<CR>%s/
-nnoremap <Leader>rtw :%s/\s\+$//e<CR>
+
+" config editing
+nnoremap <leader>rcs :source ~/.vimCR>
+nnoremap <leader>rce :tabnew ~/.vim<CR>
+augroup filetype_config
+  autocmd!
+  autocmd BufNewFile,BufRead *.sh_shared,*.sh_local set filetype=sh
+  autocmd FileType vim,nvim,zsh,sh setl sw=2 sts=2 ts=2 et
+augroup END
+
+" Fixing arrow keys for tmux
+map OD <Left>
+map OA <Up>
+map OC <Right>
+map OB <Down>
+map [1;2D <S-Left>
+map [1;2A <S-Up>
+map [1;2C <S-Right>
+map [1;2B <S-Down>
 
 
 " #### plugins
@@ -125,6 +131,15 @@ nnoremap <leader>n :NERDTreeToggle<CR>
 let g:airline_powerline_fonts = 1
 let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
+let g:airline#extensions#tabline#left_sep = ' '
+let g:airline#extensions#tabline#left_alt_sep = '|'
+let g:airline#extensions#tabline#right_sep = ' '
+let g:airline#extensions#tabline#right_alt_sep = '|'
+let g:airline_left_sep = ' '
+let g:airline_left_alt_sep = '|'
+let g:airline_right_sep = ' '
+let g:airline_right_alt_sep = '|'
+let g:airline_theme='onedark'
 
 " syntastic
 nnoremap <leader>se :SyntasticCheck<CR>:Errors<CR>
@@ -157,29 +172,14 @@ let g:ycm_semantic_triggers =  {
   \   'lua' : ['.', ':'],
   \   'erlang' : [':'],
   \ }
-let g:ycm_key_invoke_completion = '<C-k>'
-let g:ycm_key_list_stop_completion = ['<C-y>']
+let g:ycm_key_invoke_completion = '<C-p>'
+let g:ycm_key_list_stop_completion = ['<C-g>']
 let g:ycm_python_binary_path = 'python'
-
-" Fixing arrow keys for tmux
-map OD <Left>
-map OA <Up>
-map OC <Right>
-map OB <Down>
-map [1;2D <S-Left>
-map [1;2A <S-Up>
-map [1;2C <S-Right>
-map [1;2B <S-Down>
 
 
 " #### Language specific settings
 
 " OCaml
-nnoremap <leader>me :MerlinErrorCheck<CR>
-autocmd FileType ocaml setl sw=2 sts=2 ts=2 et
-
-set rtp+=~/.vim/plugged/ocp-indent-vim
-
 " ## added by OPAM user-setup for vim / base ## 93ee63e278bdfc07d1139a748ed3fff2 ## you can edit, but keep this line
 let s:opam_share_dir = system("opam config var share")
 let s:opam_share_dir = substitute(s:opam_share_dir, '[\r\n]*$', '', '')
@@ -212,3 +212,14 @@ for tool in s:opam_packages
   endif
 endfor
 
+function! OCamlConf()
+  nnoremap <leader>me :MerlinErrorCheck<CR>
+  nnoremap <leader>to :MerlinTypeOf<CR>
+  nnoremap <leader>gt :MerlinLocate<CR>
+  setl sw=2 sts=2 ts=2 et
+endfunction
+
+autocmd FileType ocaml :execute OCamlConf()
+
+" Python
+autocmd FileType python setl sw=4 sts=4 ts=4 et

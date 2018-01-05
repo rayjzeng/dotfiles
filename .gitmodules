@@ -2,14 +2,14 @@
 	path = tmux/.tmux/plugins/tpm
 	url = https://github.com/tmux-plugins/tpm.git
 [submodule "powerline-fonts"]
-	path = powerline-fonts
+	path = dependencies/powerline-fonts
 	url = https://github.com/powerline/fonts.git
 [submodule "base16-shell"]
-	path = base16-shell
+	path = dependencies/base16-shell
 	url = https://github.com/chriskempson/base16-shell.git
 [submodule "zsh/.zprezto"]
 	path = zsh/.zprezto
 	url = https://github.com/raisins2014/prezto
 [submodule "vim-plug"]
-	path = vim-plug
+	path = dependencies/vim-plug
 	url = https://github.com/junegunn/vim-plug.git

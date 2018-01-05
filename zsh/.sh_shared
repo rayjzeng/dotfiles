@@ -1,3 +1,2 @@
-alias del="trash-put"
 alias treed="tree -d"
 alias treel="tree -L"
