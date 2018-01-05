@@ -4,6 +4,7 @@ autocmd!
 " vim-plug
 " Specify plugin directory
 call plug#begin('~/.vim/plugged')
+Plug 'tpope/vim-sensible'
 
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'jeetsukumaran/vim-buffergator'
@@ -14,7 +15,6 @@ Plug 'Raimondi/delimitMate'
 Plug 'tomtom/tcomment_vim'
 Plug 'osyo-manga/vim-over'
 
-Plug 'tpope/vim-sensible'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'joshdick/onedark.vim'
@@ -42,8 +42,9 @@ set ttyfast
 
 " Visual Settings
 syntax on
-colorscheme onedark
+set cursorline
 let g:onedark_termcolors=16
+colorscheme onedark
 set showcmd
 set laststatus=2
 
@@ -102,23 +103,13 @@ set incsearch
 nnoremap \ :OverCommandLine<CR>%s/
 
 " config editing
-nnoremap <leader>rcs :source ~/.vimCR>
-nnoremap <leader>rce :tabnew ~/.vim<CR>
+nnoremap <leader>rcs :source ~/.vimrc<CR>
+nnoremap <leader>rce :tabnew ~/.vimrc<CR>
 augroup filetype_config
   autocmd!
   autocmd BufNewFile,BufRead *.sh_shared,*.sh_local set filetype=sh
   autocmd FileType vim,nvim,zsh,sh setl sw=2 sts=2 ts=2 et
 augroup END
-
-" Fixing arrow keys for tmux
-map OD <Left>
-map OA <Up>
-map OC <Right>
-map OB <Down>
-map [1;2D <S-Left>
-map [1;2A <S-Up>
-map [1;2C <S-Right>
-map [1;2B <S-Down>
 
 
 " #### plugins

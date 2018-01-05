@@ -32,11 +32,13 @@ call plug#end()
 
 
 " general configuration #######################################
-filetype plugin indent on
 set visualbell
-" set termguicolors
-colorscheme onedark
+set termguicolors
 let g:onedark_termcolors=16
+colorscheme onedark
+
+set cursorline
+set guicursor=
 
 set number
 augroup numbering
@@ -60,6 +62,7 @@ set sw=4 sts=4 ts=4
 let mapleader = ","
 nnoremap ; :
 inoremap jk <ESC>
+tnoremap <Esc> <C-\><C-n>
 
 " emacs like goto start/end of line
 " nnoremap <C-A> ^
@@ -97,16 +100,6 @@ augroup filetype_config
   autocmd BufNewFile,BufRead *.sh_shared,*.sh_local set filetype=sh
   autocmd FileType vim,nvim,zsh,sh setl sw=2 sts=2 ts=2 et
 augroup END
-
-" Fixing arrow keys for tmux
-" map OD <Left>
-" map OA <Up>
-" map OC <Right>
-" map OB <Down>
-" map [1;2D <S-Left>
-" map [1;2A <S-Up>
-" map [1;2C <S-Right>
-" map [1;2B <S-Down>
 
 
 " plugins #####################################################

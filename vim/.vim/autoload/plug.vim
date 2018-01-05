@@ -1,1 +1,1 @@
-/Users/rayzeng/.dotfiles/dependencies/vim-plug/plug.vim
+../../../dependencies/vim-plug/plug.vim
