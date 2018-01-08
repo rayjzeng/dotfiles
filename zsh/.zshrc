@@ -16,19 +16,18 @@ prompt_context() {
 # Local configuration
 [[ -e ~/.sh_local ]] && source ~/.sh_local
 
-# User programs ###############################################
+# 
+# Utilities
+#
+
+if command -v nvim >/dev/null 2>&1; then
+  export VISUAL='nvim'
+elif command -v vim >/dev/null 2>&1; then
+  export VISUAL='vim'
+fi
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # Base16 color utility
 # BASE16_SHELL=$HOME/.config/base16-shell/
 # [ -n "$PS1"  ] && [ -s $BASE16_SHELL/profile_helper.sh  ] && eval "$($BASE16_SHELL/profile_helper.sh)"
-
-# OPAM for OCaml
-. $HOME/.opam/opam-init/init.zsh > /dev/null 2> /dev/null || true
-
-# Rust path
-export PATH="$HOME/.cargo/bin:$PATH"
-if command -v rustc > /dev/null 2>&1; then
-  RUST_SRC_PATH="$(rustc --print sysroot)/lib/rustlib/src/rust/src";
-fi
-
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
