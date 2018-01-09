@@ -29,7 +29,7 @@ fi
 # BASE16_SHELL=$HOME/.config/base16-shell/
 # [ -n "$PS1"  ] && [ -s $BASE16_SHELL/profile_helper.sh  ] && eval "$($BASE16_SHELL/profile_helper.sh)"
 
-# Expand global aliases with <C-Space>
+# Expand aliases with <C-Space>
 function expand_alias() {
   if [[ $LBUFFER =~ '[A-Za-z0-9_]+$' ]]; then
     zle _expand_alias
