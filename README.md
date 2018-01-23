@@ -1,16 +1,16 @@
 # Install Notes
-Be sure to init the submodules!
+Be sure to init and update the submodules in dotfiles and in prezto
 
 ## Program setup
 1. iTerm2 (https://www.iterm2.com/)
 2. brew (https://brew.sh/) OR apt-get
-    - stow, fortune, tmux, tree, git, ag
+    - stow fortune tmux tree git ag python python3 exfat-fuse exfat-utils
     - nnn:
         - `brew install nnn` 
         - `sudo add-apt-repository ppa:twodopeshaggy/jarun`
     - safe trash:
         - `brew install trash`
-        - `sudo apt-get install trash-put`
+        - `sudo apt-get install trash-cli`
 3. Run stow
 	- Into home for tmux/zsh
 	- See 7. for vim
@@ -35,6 +35,13 @@ Be sure to init the submodules!
 5. ZSH 
     - `brew install zsh zsh-completions` or `sudo apt-get install zsh`
     - `chsh -s /bin/zsh`
+    - for prezto
+    ```sh
+     setopt EXTENDED_GLOB
+     for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
+       ln -s "$rcfile" "${ZDOTDIR:-$HOME}/.${rcfile:t}"
+     done
+     ```
     - One Dark
         * iTerm/Terminal: https://github.com/nathanbuchar/atom-one-dark-terminal
         * Gnome: https://github.com/denysdovhan/one-gnome-terminal
@@ -44,9 +51,10 @@ Be sure to init the submodules!
 7. (neo)vim
     - nvim:
         * `brew install neovim`
-        * `sudo add-apt-repository ppa:neovim-ppa/stable` \
-            `sudo apt-get update` \
-            `sudo apt-get install neovim`
+        ```sudo add-apt-repository ppa:neovim-ppa/stable
+	sudo apt-get update
+	sudo apt-get install neovim
+	```
     - `pip install neovim`
     - `stow -t ~/.config ~/.dotfiles/nvim`
     - In nvim run `:PlugInstall`
