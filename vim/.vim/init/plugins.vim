@@ -49,7 +49,7 @@ function! s:ale_toggle()
   execute 'ALEToggle'
 endfunction
 
-nmap <F8> :call <SID>ale_toggle()<CR>
+nmap <F2> :call <SID>ale_toggle()<CR>
 nmap <C-n>l <Plug>(ale_lint)
 nmap <C-n>r <Plug>(ale_reset_buffer)
 nmap <C-n>d <Plug>(ale_detail)
@@ -87,10 +87,10 @@ function! s:deo_auto_toggle()
 endfunction
 command! DeoAutoToggle call s:deo_auto_toggle()
 
-nmap <F9> :DeoAutoToggle<CR>
-imap <F9> <C-o><F9>
-nmap <F10> :DeoToggle<CR>
-imap <F10> <C-o><F10>
+nmap <F3> :DeoAutoToggle<CR>
+imap <F3> <C-o><F3>
+nmap <F4> :DeoToggle<CR>
+imap <F4> <C-o><F4>
 
 inoremap <silent><expr> <C-p> deoplete#mappings#manual_complete()
 inoremap <silent><expr> <C-h> deoplete#smart_close_popup() . "\<C-h>"

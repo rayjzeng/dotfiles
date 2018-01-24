@@ -130,7 +130,7 @@ nnoremap \ :OverCommandLine<CR>%s/
 nnoremap <silent> <leader>rs 
       \ :source ~/.vimrc<CR>
 nnoremap <silent> <leader>re
-      \ :tabedit ~/.vimrc<CR>
+      \ :e ~/.vimrc<CR>
 augroup config_ft
   autocmd!
   autocmd BufNewFile,BufRead *.sh_shared,*.sh_local set filetype=sh
