@@ -1,3 +1,5 @@
+alias l="ls -A"
+
 # User programs ###############################################
 alias treed="tree -d"
 alias treel="tree -L"
