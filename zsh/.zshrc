@@ -24,6 +24,7 @@ elif command -v vim >/dev/null 2>&1; then
 fi
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+source ~/.dotfiles/dependencies/up.sh
 
 # Base16 color utility
 # BASE16_SHELL=$HOME/.config/base16-shell/
