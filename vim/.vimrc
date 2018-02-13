@@ -10,7 +10,6 @@ autocmd!
 " #############################################################################
 call plug#begin('~/.vim/plugged')
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
-Plug 'junegunn/fzf.vim'
 Plug 'jeetsukumaran/vim-buffergator'
 Plug 'scrooloose/nerdtree', {'on': 'NERDTreeToggle'}
 Plug 'christoomey/vim-tmux-navigator'
@@ -138,6 +137,7 @@ nnoremap <silent> <leader>re
 augroup config_ft
   autocmd!
   autocmd BufNewFile,BufRead *.sh_shared,*.sh_local set filetype=sh
+  autocmd BufNewFile,BufRead zprofile,zpreztorc set filetype=zsh
 autocmd FileType zsh,sh,vim,nvim setl sw=2 sts=2 ts=2 et
 augroup END
 
@@ -145,19 +145,17 @@ augroup END
 " #############################################################################
 
 " FZF
-let g:fzf_command_prefix = 'CtrlP'
-let g:fzf_buffers_jump = 1
-
 function! s:ag_find(name, dir, bang)
   let l:opts = {}
   let l:opts.source = 'ag --hidden --ignore=.git -g "" ' . a:dir
   call fzf#run(fzf#wrap(a:name, l:opts, a:bang))
 endfunction
 
-command! -nargs=? -complete=dir -bang CtrlP
+command! -nargs=? -complete=dir -bang FZFAg
   \ call s:ag_find('cp-ag', <q-args>, <bang>0)
 
-nmap <C-p> :CtrlP
+nmap <C-p> :FZF
+nmap <M-p> :FZFAg
 
 " NERDTree
 let NERDTreeShowHidden = 1

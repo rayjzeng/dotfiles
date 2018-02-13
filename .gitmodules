@@ -9,4 +9,7 @@
 	url = https://github.com/chriskempson/base16-shell.git
 [submodule "zsh/.zprezto"]
 	path = zsh/.zprezto
-	url = https://github.com/raisins2014/prezto
+	url = git@github.com:rayjzeng/prezto
+[submodule "dependencies/up"]
+	path = dependencies/up
+	url = https://github.com/shannonmoeller/up.git
