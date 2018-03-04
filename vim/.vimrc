@@ -90,7 +90,7 @@ set formatoptions=jtcroql
 set backspace=indent,eol,start
 set autoindent
 set copyindent
-set sw=4 sts=4 ts=4
+set sw=4 sts=4 ts=4 et
 
 " General keyboard remappings
 let mapleader = ","
@@ -281,13 +281,13 @@ augroup filetype
 augroup END                                                          
 autocmd Syntax jflex source ~/.vim/syntax/jflex.vim
 
-" Java:
+" Java
 let g:deoplete#omni#input_patterns.java = '[^. *\t]\.\w*'
 autocmd FileType java,jflex setl omnifunc=javacomplete#Complete
 autocmd FileType java,jflex setl sw=4 sts=4 ts=4 et
 
 " Javascript
-autocmd FileType javascript setl sw=2 sts=2 ts=2 et
+autocmd FileType javascript setl sw=4 sts=4 ts=4 et
 
 " HTML
 autocmd FileType html setl sw=2 sts=2 ts=2 et
