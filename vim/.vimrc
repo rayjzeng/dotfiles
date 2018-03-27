@@ -102,8 +102,8 @@ endif
 cmap w!! w !sudo tee % >/dev/null
 
 " panes
-nnoremap <leader>d <C-w>v <C-w>l
-nnoremap <leader>D <C-w>s <C-w>j
+nnoremap <leader>s <C-w>v <C-w>l
+nnoremap <leader>S <C-w>s <C-w>j
 
 " Emacs like start/end of line
 inoremap <C-A> <C-o>I
@@ -269,6 +269,7 @@ autocmd FileType ocaml call s:OCamlConf()
 " Python
 autocmd FileType python setl sw=4 sts=4 ts=4 et
 let g:jedi#completions_enabled = 0
+nnoremap <leader>G :call jedi#goto()<CR>
 
 " Rust
 autocmd FileType rust setl sw=4 sts=4 ts=4 et
