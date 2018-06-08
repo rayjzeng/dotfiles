@@ -6,21 +6,34 @@ else
 endif
 autocmd!
 
-"vim-plug 
+" vim-plug 
 " #############################################################################
 call plug#begin('~/.vim/plugged')
-Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
-Plug 'jeetsukumaran/vim-buffergator'
-Plug 'scrooloose/nerdtree', {'on': 'NERDTreeToggle'}
-Plug 'christoomey/vim-tmux-navigator'
 
-Plug 'Raimondi/delimitMate'
-Plug 'tomtom/tcomment_vim'
+" Utility
+Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
+Plug 'junegunn/fzf.vim'
+Plug 'tpope/vim-vinegar'
+Plug 'tpope/vim-obsession'
+Plug 'tpope/vim-fugitive'
+
+" Movement and search
+Plug 'christoomey/vim-tmux-navigator'
+Plug 'justinmk/vim-sneak'
 Plug 'osyo-manga/vim-over'
 
+" Text editing
+Plug 'Raimondi/delimitMate'
+Plug 'tpope/vim-surround'
+Plug 'tpope/vim-commentary'
+
+" Theme
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'joshdick/onedark.vim'
+
+" Linting and Completion
+Plug 'w0rp/ale'
 
 if has('nvim')
   Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
@@ -29,14 +42,20 @@ else
     Plug 'roxma/nvim-yarp'
     Plug 'roxma/vim-hug-neovim-rpc'
 endif
-Plug 'w0rp/ale'
 
-Plug 'rgrinberg/vim-ocaml', { 'for': 'ocaml' }
-Plug 'zchee/deoplete-jedi', { 'for': 'python' }
-Plug 'davidhalter/jedi-vim', { 'for': 'python' }
-Plug 'racer-rust/vim-racer', { 'for': 'rust' }
-Plug 'rust-lang/rust.vim', { 'for': 'rust' }
-Plug 'artur-shaik/vim-javacomplete2', { 'for': ['java', 'jflex'] }
+" Language plugins
+
+" OCaml
+Plug 'rgrinberg/vim-ocaml'
+
+" Python
+Plug 'zchee/deoplete-jedi'
+Plug 'davidhalter/jedi-vim'
+
+" Java
+Plug 'artur-shaik/vim-javacomplete2'
+
+" Javascript
 Plug 'pangloss/vim-javascript'
 
 call plug#end()
@@ -82,24 +101,30 @@ augroup numbering
   autocmd InsertLeave * set relativenumber
 augroup END
 
-set listchars=trail:~
-nnoremap <Leader>rtw :%s/\s\+$//e<CR>
-
 set wrap
 set formatoptions=jtcroql
 set backspace=indent,eol,start
+
+" Whitespace
+set listchars=trail:~
+nnoremap <Leader>rtw :%s/\s\+$//e<CR>
+
+" Indentation
 set autoindent
 set copyindent
 set sw=4 sts=4 ts=4 et
 
+" Persistent undo
+set undofile
+set undodir=~/.vim/undo
+
 " General keyboard remappings
 let mapleader = ","
-nnoremap ; :
 inoremap jk <ESC>
 if exists(":tnoremap")
   tnoremap <Esc> <C-\><C-n>
 endif
-cmap w!! w !sudo tee % >/dev/null
+cnoremap w!! w !sudo tee % >/dev/null
 
 " panes
 nnoremap <leader>s <C-w>v <C-w>l
@@ -130,9 +155,9 @@ set incsearch
 nnoremap \ :OverCommandLine<CR>%s/
 
 " config editing
-nnoremap <silent> <leader>rs 
+nnoremap <silent> <leader><leader>s 
       \ :source ~/.vimrc<CR>
-nnoremap <silent> <leader>re
+nnoremap <silent> <leader><leader>e
       \ :e ~/.vimrc<CR>
 augroup config_ft
   autocmd!
@@ -157,10 +182,6 @@ command! -nargs=? -complete=dir -bang FZFAg
 nmap <C-p> :FZF
 nmap <M-p> :FZFAg
 
-" NERDTree
-let NERDTreeShowHidden = 1
-nnoremap <leader>n :NERDTreeToggle<CR>
-
 " airline
 let g:airline_powerline_fonts = 1
 let g:airline#extensions#tabline#enabled = 1
@@ -174,6 +195,9 @@ let g:airline_left_alt_sep = '|'
 let g:airline_right_sep = ' '
 let g:airline_right_alt_sep = '|'
 let g:airline_theme='onedark'
+
+" sneak
+let g:sneak#label = 1
 
 " ALE
 let g:airline#extensions#ale#enabled = 1
@@ -190,14 +214,13 @@ function! s:ale_toggle()
 endfunction
 
 nmap <F2> :call <SID>ale_toggle()<CR>
-nmap <C-n>l <Plug>(ale_lint)
-nmap <C-n>r <Plug>(ale_reset_buffer)
-nmap <C-n>d <Plug>(ale_detail)
-nmap <C-n>a <Plug>(ale_next_wrap)
-nmap <C-n>A <Plug>(ale_previous_wrap)
-
+nmap <leader>aa <Plug>(ale_lint)
+nmap <leader>ar <Plug>(ale_reset_buffer)
+nmap <leader>ad <Plug>(ale_detail)
+nmap <leader>an <Plug>(ale_next_wrap)
+nmap <leader>aA <Plug>(ale_previous_wrap) 
 " deoplete
-let g:deoplete#enable_at_startup = 0
+let g:deoplete#enable_at_startup = 1
 let g:deoplete#disable_auto_complete = 0
 let g:deoplete#enable_smart_case = 1
 let g:deoplete#file#enable_buffer_path = 1
@@ -271,17 +294,6 @@ autocmd FileType python setl sw=4 sts=4 ts=4 et
 let g:jedi#completions_enabled = 0
 nnoremap <leader>G :call jedi#goto()<CR>
 
-" Rust
-autocmd FileType rust setl sw=4 sts=4 ts=4 et
-let g:racer_cmd = "~/.cargo/bin/racer"
-let g:racer_experimental_completer = 1
-
-"JFlex
-augroup filetype
-  autocmd BufRead,BufNewFile *.flex,*.jflex set filetype=jflex         
-augroup END                                                          
-autocmd Syntax jflex source ~/.vim/syntax/jflex.vim
-
 " Java
 let g:deoplete#omni#input_patterns.java = '[^. *\t]\.\w*'
 autocmd FileType java,jflex setl omnifunc=javacomplete#Complete
@@ -293,17 +305,3 @@ autocmd FileType javascript setl sw=4 sts=4 ts=4 et
 " HTML
 autocmd FileType html setl sw=2 sts=2 ts=2 et
 
-
-" project-config
-" #############################################################################
-let s:sources = ["bin", "lib/*"]
-let s:comp_dir = "/Users/rayzeng/Development/4120/xic"
-function! s:Compilers()
-  let l:s = []
-  for i in range(0, len(s:sources) - 1)
-    call add(l:s, s:comp_dir . "/" . s:sources[i])
-  endfor
-  let g:ale_java_javac_classpath = join(l:s, ":")
-endfunction
-
-autocmd BufNewFile,BufRead */4120/xic/* call s:Compilers()
