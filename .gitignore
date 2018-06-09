@@ -1,6 +1,5 @@
 # vim plugins
 vim/.vim/plugged/
-vim/.vim/undo/
 
 # tmux plugins
 !tmux/.tmux/plugins
