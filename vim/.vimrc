@@ -7,7 +7,7 @@ endif
 autocmd!
 
 " #############################################################################
-" vim-plug 
+" vim-plug
 " #############################################################################
 call plug#begin('~/.vim/plugged')
 
@@ -28,9 +28,11 @@ Plug 'Raimondi/delimitMate'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 
+" Statusline
+Plug 'itchyny/lightline.vim'
+Plug 'maximbaz/lightline-ale'
+
 " Theme
-Plug 'vim-airline/vim-airline'
-Plug 'vim-airline/vim-airline-themes'
 Plug 'joshdick/onedark.vim'
 
 " Linting and Completion
@@ -64,7 +66,7 @@ call plug#end()
 
 
 " #############################################################################
-" general-config 
+" general-config
 " #############################################################################
 filetype plugin indent on
 set ttyfast
@@ -112,8 +114,8 @@ set wrap
 set formatoptions=jtcroql
 
 " Whitespace
-set listchars=trail:~
-nnoremap <Leader>rtw :%s/\s\+$//e<CR>
+set listchars=eol:$,tab:>-,trail:~,extends:>,precedes:<
+nnoremap <leader><leader>r :%s/\s\+$//e<CR>
 
 " Sane backspace behavior
 set backspace=indent,eol,start
@@ -130,8 +132,9 @@ set directory=$HOME/.vim/swp//
 set backupdir=$HOME/.vim/backup//
 
 " General keyboard remappings
-let mapleader = ","
+let mapleader = ' '
 inoremap jk <ESC>
+nnoremap Q @@
 
 " Esc in nvim terminal
 if exists(":tnoremap")
@@ -142,12 +145,12 @@ endif
 cnoremap w!! w !sudo tee % >/dev/null
 
 " Easy buffer switching
-nnoremap gb :bn<CR>
-nnoremap gB :bp<CR>
+nnoremap <silent> gb :bn<CR>
+nnoremap <silent> gB :bp<CR>
 
 " Panes
-nnoremap <leader>s <C-w>v <C-w>l
-nnoremap <leader>S <C-w>s <C-w>j
+nnoremap <leader>v <C-w>v <C-w>l
+nnoremap <leader>s <C-w>s <C-w>j
 
 " Emacs like start/end of line
 inoremap <C-A> <C-o>I
@@ -174,7 +177,7 @@ set incsearch
 nnoremap \ :OverCommandLine<CR>%s/
 
 " config editing
-nnoremap <silent> <leader><leader>s 
+nnoremap <silent> <leader><leader>s
       \ :source ~/.vimrc<CR>
 nnoremap <silent> <leader><leader>e
       \ :e ~/.vimrc<CR>
@@ -190,66 +193,11 @@ augroup END
 " plugin-config
 " #############################################################################
 
-" FZF
-" #############################################################################
-nnoremap <C-p> :FZF<CR> 
-
-" Some rg options
-" --column: Show column number
-" --line-number: Show line number
-" --no-heading: Do not show file headings in results
-" --fixed-strings: Search term as a literal string
-" --ignore-case: Case insensitive search
-" --no-ignore: Do not respect .gitignore, etc...
-" --hidden: Search hidden files and folders
-" --follow: Follow symlinks
-" --glob: Additional conditions for search (in this case ignore everything in the .git/ folder)
-" --color: Search color options
-
-" Find in directory
-let s:rg_all = 'rg --column --line-number --no-heading --fixed-strings 
-            \--ignore-case --no-ignore --hidden --glob "!.git/*" --color always '
-command! -bang -nargs=* Find call fzf#vim#grep(s:rg_all . shellescape(<q-args>), 1, <bang>0)
-nnoremap <M-p> :Find 
-
-" Buffers and tabs
-nnoremap <leader>b :FBuffers<CR>
-nnoremap <leader>t :FWindows<CR>
-
-" Recent files
-nnoremap <leader>h :FHistory<CR>
-
-let g:fzf_command_prefix = 'F'
-
-" airline
-" #############################################################################
-let g:airline_powerline_fonts = 1
-let g:airline#extensions#tabline#enabled = 1
-let g:airline#extensions#tabline#fnamemod = ':t'
-let g:airline#extensions#tabline#left_sep = ' '
-let g:airline#extensions#tabline#left_alt_sep = '|'
-let g:airline#extensions#tabline#right_sep = ' '
-let g:airline#extensions#tabline#right_alt_sep = '|'
-let g:airline_left_sep = ' '
-let g:airline_left_alt_sep = '|'
-let g:airline_right_sep = ' '
-let g:airline_right_alt_sep = '|'
-let g:airline_theme='onedark'
-
-" sneak
-" #############################################################################
-let g:sneak#label = 1
-map ' <Plug>Sneak_, 
-map f <Plug>Sneak_f
-map F <Plug>Sneak_F
-map t <Plug>Sneak_t
-map T <Plug>Sneak_T
-
 " ALE
 " #############################################################################
-let g:airline#extensions#ale#enabled = 1
 let g:ale_lint_on_text_changed = 'never'
 let g:ale_lint_on_enter = 0
+let g:ale_lint_on_save = 1
 
 function! s:ale_toggle()
   if g:ale_enabled
@@ -259,14 +207,15 @@ function! s:ale_toggle()
   endif
   execute 'ALEToggle'
 endfunction
-nmap <F2> :call <SID>ale_toggle()<CR>
+nmap <F4> :call <SID>ale_toggle()<CR>
 
 " Linting shortcuts
-nnoremap <leader>aa <Plug>(ale_lint)
-nnoremap <leader>ar <Plug>(ale_reset_buffer)
-nnoremap <leader>ad <Plug>(ale_detail)
-nnoremap <leader>an <Plug>(ale_next_wrap)
-nnoremap <leader>aA <Plug>(ale_previous_wrap) 
+nmap <leader>al <Plug>(ale_lint)
+nmap <leader>ar <Plug>(ale_reset_buffer)
+nmap <leader>ad <Plug>(ale_detail)
+nmap <leader>aa <Plug>(ale_next_wrap)
+nmap <leader>aA <Plug>(ale_previous_wrap)
+
 
 " deoplete
 " #############################################################################
@@ -285,7 +234,7 @@ function! s:deo_toggle()
   let s:deo_enabled = !s:deo_enabled
 endfunction
 command! DeoToggle call s:deo_toggle()
-nmap <F3> :DeoToggle<CR>
+nmap <F2> :DeoToggle<CR>
 
 " Set options
 call deoplete#custom#option('smart_case', 1)
@@ -304,7 +253,7 @@ function! s:deo_auto_toggle()
   let s:auto_enabled = !s:auto_enabled
 endfunction
 command! DeoAuto call s:deo_auto_toggle()
-nmap <F4> :DeoAuto<CR>
+nmap <F3> :DeoAuto<CR>
 
 " Keybindings
 inoremap <silent><expr> <C-p> deoplete#mappings#manual_complete()
@@ -316,10 +265,95 @@ inoremap <silent><expr> <S-TAB>
       \ pumvisible() ? "\<C-p>" : "\<S-TAB>"
 
 " Omni source config
-call deoplete#custom#option('ignore_sources', 
+call deoplete#custom#option('ignore_sources',
     \ {
     \   'ocaml': ['buffer', 'around', 'member', 'tag'],
     \ })
+
+
+" fzf
+" #############################################################################
+nnoremap <C-p> :FZF<CR> 
+
+" Some rg options
+" --column: Show column number
+" --line-number: Show line number
+" --no-heading: Do not show file headings in results
+" --fixed-strings: Search term as a literal string
+" --ignore-case: Case insensitive search
+" --no-ignore: Do not respect .gitignore, etc...
+" --hidden: Search hidden files and folders
+" --follow: Follow symlinks
+" --glob: Additional conditions for search (in this case ignore everything in the .git/ folder)
+" --color: Search color options
+
+" Find in directory
+let s:rg_all = 'rg --column --line-number --no-heading --fixed-strings
+            \ --ignore-case --no-ignore --hidden --glob "!.git/*" --color always '
+command! -bang -nargs=* FFind call fzf#vim#grep(s:rg_all . shellescape(<q-args>), 1, <bang>0)
+nnoremap <M-p> :FFind 
+
+" Buffers and tabs
+nnoremap <leader>b :FBuffers<CR>
+nnoremap <leader>t :FWindows<CR>
+
+" Recent files, commands, searches
+nnoremap q; :FHistory<CR>
+nnoremap q: :FHistory:<CR>
+nnoremap q/ :FHistory/<CR>
+
+let g:fzf_command_prefix = 'F'
+
+
+" lightline
+" #############################################################################
+
+let g:lightline = { 
+      \ 'colorscheme': 'one',
+      \ 'active': {
+      \   'left':[
+      \       [ 'mode', 'paste' ],
+      \       [ 'gitbranch', 'readonly', 'filename', 'modified' ],
+      \     ],
+      \   'right': [
+      \       [ 'linter_checking', 'linter_errors', 'linter_warnings' ],
+      \       [ 'lineinfo' ],
+      \       [ 'percent' ],
+      \       [ 'fileformat', 'fileencoding', 'filetype' ],
+      \     ],
+      \   },
+      \ 'component_function': {
+      \     'gitbranch': 'fugitive#head',
+      \     'filename': 'FileNameNoFZF',
+      \   },
+      \ 'component_expand': {
+      \     'linter_checking': 'lightline#ale#checking',
+      \     'linter_warnings': 'lightline#ale#warnings',
+      \     'linter_errors': 'lightline#ale#errors',
+      \     'linter_ok': 'lightline#ale#ok',
+      \   },
+      \ 'component_type': {
+      \     'linter_checking': 'left',
+      \     'linter_warnings': 'warning',
+      \     'linter_errors': 'error',
+      \     'linter_ok': 'left',
+      \   },
+      \ }
+
+" Override filename function to hide for fzf
+function! FileNameNoFZF()
+  return &ft ==# 'fzf' ? '' : (expand('%:t') !=# '' ? expand('%:t') : '[No Name]')
+endfunction
+
+
+" sneak
+" #############################################################################
+let g:sneak#label = 1
+map ' <Plug>Sneak_,
+map f <Plug>Sneak_f
+map F <Plug>Sneak_F
+map t <Plug>Sneak_t
+map T <Plug>Sneak_T
 
 
 " #############################################################################
@@ -340,21 +374,24 @@ endif
 function! s:OCamlConf()
   if s:opam
     nnoremap <leader>me :MerlinErrorCheck<CR>
-    nnoremap <leader>to :MerlinTypeOf<CR>
-    nnoremap <leader>gt :MerlinLocate<CR>
+    nnoremap <leader>mt :MerlinTypeOf<CR>
+    nnoremap <leader>ml :MerlinLocate<CR>
   endif
   setl sw=2 sts=2 ts=2 et
 endfunction
 
 autocmd FileType ocaml call s:OCamlConf()
 
+
 " Python
 " #############################################################################
 let g:jedi#completions_enabled = 0
 call deoplete#custom#source('jedi', 'show_docstring', 1)
 
+
 " Indentation for Python
 autocmd FileType python setl sw=4 sts=4 ts=4 et
+
 
 " Java
 " #############################################################################
@@ -362,9 +399,11 @@ autocmd FileType python setl sw=4 sts=4 ts=4 et
 autocmd FileType java,jflex,cup setl omnifunc=javacomplete#Complete
 autocmd FileType java,jflex,cup setl sw=4 sts=4 ts=4 et
 
+
 " Javascript
 " #############################################################################
 autocmd FileType javascript setl sw=4 sts=4 ts=4 et
+
 
 " HTML
 " #############################################################################
