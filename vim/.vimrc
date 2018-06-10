@@ -137,9 +137,9 @@ inoremap jk <ESC>
 nnoremap Q @@
 
 " Esc in nvim terminal
-if exists(":tnoremap")
-  tnoremap <Esc> <C-\><C-n>
-endif
+" if exists(":tnoremap")
+"   tnoremap <Esc> <C-\><C-n>
+" endif
 
 " Open current buffer as root
 cnoremap w!! w !sudo tee % >/dev/null
