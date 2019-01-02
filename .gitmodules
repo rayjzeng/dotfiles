@@ -10,3 +10,6 @@
 [submodule "dependencies/up"]
 	path = dependencies/up
 	url = https://github.com/shannonmoeller/up.git
+[submodule "zsh/.zim"]
+	path = zsh/.zim
+	url = https://github.com/zimfw/zimfw.git
