@@ -14,7 +14,7 @@ Run `git submodule init` and `git submodule update` to set up clone.
 	- Get [brew](https://brew.sh/)
 	- macOS: use /dependecies/Brewfile with `brew bundle install`
 	- short list of packages
-	    * `stow fortune tmux tree git python python3 exfat-fuse exfat-utils`
+	    * `rg fd stow fortune tmux tree git python python3 exfat-fuse exfat-utils`
 	    * nnn:
 		    ```sh
 		    brew install nnn
