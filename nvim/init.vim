@@ -140,7 +140,7 @@
     set splitbelow                  " open splits to bottom
 
     " 24 bit color set when available
-    if $TERM =~ '.*256.*' && $COLORTERM ==# 'truecolor'
+    if $TERM =~# '.*256.*\|kitty' && $COLORTERM ==# 'truecolor'
         set termguicolors
     endif
 
