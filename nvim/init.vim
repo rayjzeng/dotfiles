@@ -6,7 +6,7 @@
 
 " init {{
 
-	let s:has_nvim = has('nvim')
+    let s:has_nvim = has('nvim')
 
     if !s:has_nvim
         set nocompatible
@@ -83,6 +83,10 @@
         " better autocomplete for neovim
         if s:has_nvim
             Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
+        else
+          Plug 'Shougo/deoplete.nvim'
+            Plug 'roxma/nvim-yarp'
+            Plug 'roxma/vim-hug-neovim-rpc'
         endif
 
     " }}
@@ -374,8 +378,6 @@
 
     " deoplete {{
 
-	if s:has_nvim
-
         " Enable deoplete
         let s:deo_enabled = 1
         let g:deoplete#enable_at_startup = s:deo_enabled
@@ -429,10 +431,8 @@
                     \   'ocaml': ['buffer', 'around', 'member', 'tag'],
                     \ })
 
-		" custom sources
-		call deoplete#custom#source('jedi', 'show_docstring', 1)
-
-	endif
+        " custom sources
+        call deoplete#custom#source('jedi', 'show_docstring', 1)
 
     " }}
 

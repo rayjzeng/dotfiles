@@ -13,27 +13,6 @@ export ZIM_HOME=${ZDOTDIR:-${HOME}}/.zim
 unsetopt correct
 
 #
-# Environment setup
-#
-
-export DOT_DIR=$HOME/dotfiles
-
-# OPAM for OCaml
-. $HOME/.opam/opam-init/init.zsh > /dev/null 2> /dev/null || true
-
-# Rust path
-export PATH="$HOME/.cargo/bin:$PATH"
-if command -v rustc >/dev/null 2>&1; then
-  RUST_SRC_PATH="$(rustc --print sysroot)/lib/rustlib/src/rust/src";
-fi
-
-# miniconda3
-export PATH="$HOME/miniconda3/bin:$PATH"
-
-# iterm2 integration
-test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
-
-#
 # Utilities
 #
 
@@ -53,7 +32,7 @@ export FZF_DEFAULT_COMMAND='fd -I -H -E ".git/*"'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 
 # Up
-source $DOT_DIR/dependencies/up/up.sh
+source $HOME/dotfiles/dependencies/up/up.sh
 
 # Expand aliases with <C-Space>
 function expand_alias() {
@@ -66,10 +45,6 @@ function expand_alias() {
 
 zle -N expand_alias
 bindkey "^ " expand_alias
-
-# 
-# Aliases
-#
 
 alias la="ls -A"
 
