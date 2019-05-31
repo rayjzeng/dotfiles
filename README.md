@@ -1,8 +1,9 @@
 # Install Notes
-===============
-Clone into `$HOME/dotfiles`.
-Run `git submodule init` and `git submodule update --recursive` to set up 
-submodules.
+---------------
+Run `git clone --recurse-submodules git@github.com:rayjzeng/dotfiles.git $HOME/dotfiles`.
+
+Run `git submodule init` and `git submodule update --recursive` 
+to set up submodules if needed (particularly check `zsh/.zim`).
 
 ## Common Environment setup
 ---------------------------
@@ -10,23 +11,24 @@ submodules.
 ### Install dependencies
 - macOS:
     * Get [brew][1]
-    * use /dependecies/Brewfile with `brew bundle install`
+    * use `/dependecies/Brewfile` with `brew bundle install`
 - arch:
     * Install yay `pacman -S yay`
-- (incomplete) list of needed packages [TODO: make list for arch]
+- Some needed packages (refer to Brewfile)
     * rg
     * fd
     * stow
     * git
     * python(2/3)
-- to have safe trash install (and update .local.sh):
+- to have safe trash install (and update .local.sh with aliases):
     * brew name: trash
     * arch pkg: trash-cli
 
 #### Quick reminder on using stow
 - See `man stow`
 - General command `stow -t [target dir] -d [stow dir] [pkg name]`
-- target directory defaults to parent of stow directory
+- Note: target directory defaults to parent of stow directory and
+    stow directory defaults to current directory
 
 ### Get zsh
 zsh configuration currently makes use of [zim][2].
@@ -52,20 +54,21 @@ zsh configuration currently makes use of [zim][2].
     `mkdir ~/.config/nvim && stow -t ~/.config/nvim -d $DOT_DIR nvim`
 - In nvim run `:PlugInstall` and `:UpdateRemotePlugins`
 - Symlinks should make running vim interchangable with neovim
-    * Current limitations [TODO make config compatible]
-	+ undodir is not set explicitly for vim
-	+ deoplete and remote plugins are not available
+    * Current limitations (TODO: make config fully vim compatible)
+	    + undo and history  is not set for vim
+        + deoplete and remote plugins are not available
 
 ### Get tmux (optional)
-- Install with package manager of choic
-- `stow tmux`
+- Install with package manager of choice
+- Stow configuration: `stow tmux`
 - Run `<leader>I` to install plugins
 
 ### Install language support
 - Python:
-    * Just use brew python and/or Conda
+    * Just use brew and/or Conda
     * pip install pynvim jedi pylint
-    * If so inclined: [pyenv setup reference][5]
+    * If more complex environment management is needed consider: 
+        [pyenv setup reference][5]
 - Rust
     * [Installation][6]
 	```sh
@@ -73,9 +76,8 @@ zsh configuration currently makes use of [zim][2].
 	rustup component add rust-src
 	```
 - OCaml
-    * Check out the CS 3110 OCaml installation notes
     * [General install instructions][7]
-    * Probably also want core/lwt and other libraries
+    * Potentially avoid brew for X11 support on Mac
 
 ## Arch Details
 ---------------
