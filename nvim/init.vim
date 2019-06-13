@@ -22,8 +22,8 @@
     endif
 
     " Set python environments if working with virtualenvs
-    " let g:python_host_prog="python2"
-    " let g:python3_host_prog ="python3"
+    let g:python_host_prog=$NVIM_PYTHON2
+    let g:python3_host_prog =$NVIM_PYTHON3
 
 " }}
 
@@ -85,8 +85,8 @@
             Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
         else
           Plug 'Shougo/deoplete.nvim'
-            Plug 'roxma/nvim-yarp'
-            Plug 'roxma/vim-hug-neovim-rpc'
+          Plug 'roxma/nvim-yarp'
+          Plug 'roxma/vim-hug-neovim-rpc'
         endif
 
     " }}
