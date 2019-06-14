@@ -92,12 +92,14 @@
         Plug 'maximbaz/lightline-ale'
 
         " better autocomplete for neovim
-        if s:has_nvim
-            Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-        else
-          Plug 'Shougo/deoplete.nvim'
-          Plug 'roxma/nvim-yarp'
-          Plug 'roxma/vim-hug-neovim-rpc'
+        if (python3_version >- 306)
+            if s:has_nvim
+                Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
+            else
+              Plug 'Shougo/deoplete.nvim'
+              Plug 'roxma/nvim-yarp'
+              Plug 'roxma/vim-hug-neovim-rpc'
+            endif
         endif
 
     " }}
