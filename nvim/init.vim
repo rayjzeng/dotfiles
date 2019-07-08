@@ -92,7 +92,7 @@
         Plug 'maximbaz/lightline-ale'
 
         " better autocomplete for neovim
-        if (python3_version >- 306)
+        if (python3_version >= 306)
             if s:has_nvim
                 Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
             else
