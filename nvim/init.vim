@@ -8,6 +8,14 @@
 
     let s:has_nvim = has('nvim')
 
+    " Set python based on environment variables
+    if len(expand($NVIM_PYTHON2)) > 0
+        let g:python_host_prog=expand($NVIM_PYTHON2)
+    endif
+    if len(expand($NVIM_PYTHON3)) > 0
+        let g:python3_host_prog =expand($NVIM_PYTHON3)
+    endif
+
     if has('python3')
         py3 import vim; from sys import version_info as v;
                     \ vim.command('let python3_version=%d' % (v[0]*100 + v[1]))
@@ -26,14 +34,6 @@
         set shell=/bin/zsh
     else
         set shell=/bin/bash
-    endif
-
-    " Set python based on environment variables
-    if len(expand($NVIM_PYTHON2)) > 0
-        let g:python_host_prog=expand($NVIM_PYTHON2)
-    endif
-    if len(expand($NVIM_PYTHON3)) > 0
-        let g:python3_host_prog =expand($NVIM_PYTHON3)
     endif
 
 " }}
