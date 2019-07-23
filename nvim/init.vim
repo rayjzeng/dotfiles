@@ -6,30 +6,33 @@
 
 " init {{
 
-    let s:has_nvim = has('nvim')
+    let s:nvim = has('nvim')
 
-    " Set python based on environment variables
-    if len(expand($NVIM_PYTHON2)) > 0
-        let g:python_host_prog=expand($NVIM_PYTHON2)
-    endif
-    if len(expand($NVIM_PYTHON3)) > 0
-        let g:python3_host_prog =expand($NVIM_PYTHON3)
-    endif
-
-    if has('python3')
-        py3 import vim; from sys import version_info as v;
-                    \ vim.command('let python3_version=%d' % (v[0]*100 + v[1]))
-    else
-        let python3_version=0
-    endif
-
-    if !s:has_nvim
+    if !s:nvim
         set nocompatible
     endif
 
     " clear autocmds when hot reloading
     autocmd!
 
+    " set up python environment
+    if has('python3')
+        if len(expand($NVIM_PYTHON3)) > 0
+            let g:python3_host_prog =expand($NVIM_PYTHON3)
+        endif
+
+        " check python version
+        py3 import vim; from sys import version_info as v;
+                    \ vim.command('let python3_version=%d' % (v[0]*100 + v[1]))
+    else
+        let python3_version=0
+    endif
+
+    if has('python2') && len(expand($NVIM_PYTHON2)) > 0
+        let g:python_host_prog=expand($NVIM_PYTHON2)
+    endif
+
+    " set up shell
     if executable('zsh')
         set shell=/bin/zsh
     else
@@ -67,13 +70,10 @@
         Plug 'justinmk/vim-sneak'
         Plug 'unblevable/quick-scope'
 
-        " Better find/replace
-        Plug 'osyo-manga/vim-over'
-
         " Text manipulation
-        Plug 'Raimondi/delimitMate'
         Plug 'tpope/vim-surround'
         Plug 'tpope/vim-commentary'
+        Plug 'tpope/vim-repeat'
 
     " }}
 
@@ -87,34 +87,34 @@
         Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
         Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
 
-        " Linting and Completion
-        Plug 'w0rp/ale'
-        Plug 'maximbaz/lightline-ale'
+        " " Linting and Completion
+        " Plug 'w0rp/ale'
+        " Plug 'maximbaz/lightline-ale'
 
-        " better autocomplete for neovim
-        if (python3_version >= 306)
-            if s:has_nvim
-                Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-            else
-              Plug 'Shougo/deoplete.nvim'
-              Plug 'roxma/nvim-yarp'
-              Plug 'roxma/vim-hug-neovim-rpc'
-            endif
-        endif
+        " " better autocomplete for neovim
+        " if (python3_version >= 306)
+        "     if s:nvim
+        "         Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
+        "     else
+        "       Plug 'Shougo/deoplete.nvim'
+        "       Plug 'roxma/nvim-yarp'
+        "       Plug 'roxma/vim-hug-neovim-rpc'
+        "     endif
+        " endif
 
     " }}
 
     " Language plugins {{
 
         " OCaml
-        Plug 'copy/deoplete-ocaml'
-        Plug 'rgrinberg/vim-ocaml'
+        " Plug 'copy/deoplete-ocaml'
+        " Plug 'rgrinberg/vim-ocaml'
 
         " Python
-        Plug 'zchee/deoplete-jedi'
+        " Plug 'zchee/deoplete-jedi'
 
         " Javascript
-        Plug 'pangloss/vim-javascript'
+        " Plug 'pangloss/vim-javascript'
 
     " }}
 
@@ -173,7 +173,7 @@
         autocmd InsertLeave * set relativenumber
 
         " disable numbering in terminals
-        if s:has_nvim
+        if s:nvim
             autocmd TermOpen * setlocal nonumber norelativenumber
         endif
     augroup END
@@ -184,6 +184,11 @@
     set hlsearch                    " Highlight search terms
     set ignorecase                  " Case insensitive search
     set smartcase                   " Case sensitive when uc present
+
+    " show previews for search and replace
+    if s:nvim
+        set inccommand=nosplit
+    endif
 
     " Whitespace charaters
     set list
@@ -215,7 +220,7 @@
     endif
 
     " set undo and backup when using neovim
-    if s:has_nvim
+    if s:nvim
         " set backup
         if has('persistent_undo')
             set undofile                " So is persistent undo ...
@@ -270,9 +275,9 @@
         " clear highlight
         nnoremap <silent> <leader>n :noh<CR>
 
-        " use vim-over for replace
-        nnoremap \ :OverCommandLine<CR>%s/
-        vnoremap \ :OverCommandLine<CR>s/
+        " Use magic for substitution
+        nnoremap \ :%s/\v
+        vnoremap \ :s/\v
 
         " Yank from the cursor to the end of the line, to be consistent with C and D.
         nnoremap Y y$
@@ -289,8 +294,15 @@
 
     " utility shortcuts {{
 
+        fun! s:TrimWhitespace()
+            let l:save = winsaveview()
+            keeppatterns %s/\s\+$//e
+            call winrestview(l:save)
+        endfun
+
         " strip whitespace at eol
-        nnoremap <silent> <leader><leader>rtw :%s/\s\+$//e<CR>
+		command! TrimWhitespace call s:TrimWhitespace()
+        nnoremap <leader>w :TrimWhitespace<CR>
 
         " Open current buffer as root
         cnoremap w!! w !sudo tee % >/dev/null
@@ -311,8 +323,7 @@
         " config filetypes
         augroup config_ft
             autocmd!
-            autocmd BufNewFile,BufRead *.sh_shared,*.sh_local set filetype=sh
-            autocmd BufNewFile,BufRead zprofile,zpreztorc set filetype=zsh
+            autocmd BufNewFile,BufRead zim, zimrc, zprofile set filetype=zsh
             autocmd FileType zsh,sh setl sw=2 sts=2 ts=2 et
             autocmd FileType vim setl sw=4 sts=4 ts=4 et
         augroup END
@@ -364,92 +375,92 @@
 
     " }}
 
-    " ALE {{
+    " " ALE {{
 
-        let g:ale_lint_on_text_changed = 'never'
-        let g:ale_lint_on_enter = 0
-        let g:ale_lint_on_save = 1
+    "     let g:ale_lint_on_text_changed = 'never'
+    "     let g:ale_lint_on_enter = 0
+    "     let g:ale_lint_on_save = 1
 
-        function! s:ale_toggle()
-            if g:ale_enabled
-                echo "Disabling ALE."
-            else
-                echo "Enabling ALE."
-            endif
-            execute 'ALEToggle'
-        endfunction
-        nmap <F4> :call <SID>ale_toggle()<CR>
+    "     function! s:ale_toggle()
+    "         if g:ale_enabled
+    "             echo "Disabling ALE."
+    "         else
+    "             echo "Enabling ALE."
+    "         endif
+    "         execute 'ALEToggle'
+    "     endfunction
+    "     nmap <F4> :call <SID>ale_toggle()<CR>
 
-        " Linting shortcuts
-        nmap <leader>al <Plug>(ale_lint)
-        nmap <leader>ar <Plug>(ale_reset_buffer)
-        nmap <leader>ad <Plug>(ale_detail)
-        nmap <leader>aa <Plug>(ale_next_wrap)
-        nmap <leader>aA <Plug>(ale_previous_wrap)
+    "     " Linting shortcuts
+    "     nmap <leader>al <Plug>(ale_lint)
+    "     nmap <leader>ar <Plug>(ale_reset_buffer)
+    "     nmap <leader>ad <Plug>(ale_detail)
+    "     nmap <leader>aa <Plug>(ale_next_wrap)
+    "     nmap <leader>aA <Plug>(ale_previous_wrap)
 
-    " }}
+    " " }}
 
-    " deoplete {{
-    if (python3_version >= 306)
+    " " deoplete {{
+    " if (python3_version >= 306)
 
-        " Enable deoplete
-        let s:deo_enabled = 1
-        let g:deoplete#enable_at_startup = s:deo_enabled
+    "     " Enable deoplete
+    "     let s:deo_enabled = 1
+    "     let g:deoplete#enable_at_startup = s:deo_enabled
 
-        " Set options
-        call deoplete#custom#option('smart_case', 1)
+    "     " Set options
+    "     call deoplete#custom#option('smart_case', 1)
 
-        " Enable autocompletion popup
-        let s:auto_enabled = 1
-        call deoplete#custom#option('auto_complete', s:auto_enabled)
+    "     " Enable autocompletion popup
+    "     let s:auto_enabled = 1
+    "     call deoplete#custom#option('auto_complete', s:auto_enabled)
 
-        " Toggle deoplete
-        function! s:deo_toggle()
-            if s:deo_enabled
-                echo 'Disabling deoplete.'
-                call deoplete#disable()
-            else
-                echo 'Enabling deoplete.'
-                call deoplete#enable()
-            endif
-            let s:deo_enabled = !s:deo_enabled
-        endfunction
-        command! DeoToggle call s:deo_toggle()
-        nnoremap <silent> <F2> :DeoToggle<CR>
+    "     " Toggle deoplete
+    "     function! s:deo_toggle()
+    "         if s:deo_enabled
+    "             echo 'Disabling deoplete.'
+    "             call deoplete#disable()
+    "         else
+    "             echo 'Enabling deoplete.'
+    "             call deoplete#enable()
+    "         endif
+    "         let s:deo_enabled = !s:deo_enabled
+    "     endfunction
+    "     command! DeoToggle call s:deo_toggle()
+    "     nnoremap <silent> <F2> :DeoToggle<CR>
 
-        " Toggle auto complete
-        function! s:deo_auto_toggle()
-            if s:auto_enabled
-                echo 'Disabling tab complete.'
-            else
-                echo 'Enabling tab complete.'
-            endif
-            let s:auto_enabled = !s:auto_enabled
-            call deoplete#custom#option({ 'auto_complete': s:auto_enabled })
-        endfunction
-        command! DeoAuto call s:deo_auto_toggle()
-        nnoremap <silent> <F3> :DeoAuto<CR>
+    "     " Toggle auto complete
+    "     function! s:deo_auto_toggle()
+    "         if s:auto_enabled
+    "             echo 'Disabling tab complete.'
+    "         else
+    "             echo 'Enabling tab complete.'
+    "         endif
+    "         let s:auto_enabled = !s:auto_enabled
+    "         call deoplete#custom#option({ 'auto_complete': s:auto_enabled })
+    "     endfunction
+    "     command! DeoAuto call s:deo_auto_toggle()
+    "     nnoremap <silent> <F3> :DeoAuto<CR>
 
-        " Completion keybindings
-        inoremap <silent><expr> <C-p> deoplete#mappings#manual_complete()
-        inoremap <silent><expr> <C-h> deoplete#smart_close_popup() . "\<C-h>"
-        inoremap <silent><expr> <C-g> deoplete#undo_completion()
-        inoremap <silent><expr> <TAB>
-                    \ pumvisible() ? "\<C-n>" : "\<TAB>"
-        inoremap <silent><expr> <S-TAB>
-                    \ pumvisible() ? "\<C-p>" : "\<S-TAB>"
+    "     " Completion keybindings
+    "     inoremap <silent><expr> <C-p> deoplete#mappings#manual_complete()
+    "     inoremap <silent><expr> <C-h> deoplete#smart_close_popup() . "\<C-h>"
+    "     inoremap <silent><expr> <C-g> deoplete#undo_completion()
+    "     inoremap <silent><expr> <TAB>
+    "                 \ pumvisible() ? "\<C-n>" : "\<TAB>"
+    "     inoremap <silent><expr> <S-TAB>
+    "                 \ pumvisible() ? "\<C-p>" : "\<S-TAB>"
 
-        " Omni source config for languages
-        call deoplete#custom#option('ignore_sources',
-                    \ {
-                    \   'ocaml': ['buffer', 'around', 'member', 'tag'],
-                    \ })
+    "     " Omni source config for languages
+    "     call deoplete#custom#option('ignore_sources',
+    "                 \ {
+    "                 \   'ocaml': ['buffer', 'around', 'member', 'tag'],
+    "                 \ })
 
-        " custom sources
-        call deoplete#custom#source('jedi', 'show_docstring', 1)
+    "     " custom sources
+    "     call deoplete#custom#source('jedi', 'show_docstring', 1)
 
-    endif
-    " }}
+    " endif
+    " " }}
 
     " fzf {{
 
@@ -488,25 +499,25 @@
 " lang-config {{
 
     " OCaml
-    let s:opam = 0
-    if executable('opam')
-        let s:opamshare = substitute(system('opam config var share'),'\n$','','''')
-        execute 'set rtp^=' . s:opamshare . '/ocp-indent/vim'
-        execute 'set rtp+=' . s:opamshare . '/merlin/vim'
-        let s:opam = 1
-    endif
+    " let s:opam = 0
+    " if executable('opam')
+    "     let s:opamshare = substitute(system('opam config var share'),'\n$','','''')
+    "     execute 'set rtp^=' . s:opamshare . '/ocp-indent/vim'
+    "     execute 'set rtp+=' . s:opamshare . '/merlin/vim'
+    "     let s:opam = 1
+    " endif
 
-    " Configure only when writing OCaml
-    function! s:OCamlConf()
-        if s:opam
-            nnoremap <leader>me :MerlinErrorCheck<CR>
-            nnoremap <leader>mt :MerlinTypeOf<CR>
-            nnoremap <leader>ml :MerlinLocate<CR>
-        endif
-        setl sw=2 sts=2 ts=2 et
-    endfunction
+    " " Configure only when writing OCaml
+    " function! s:OCamlConf()
+    "     if s:opam
+    "         nnoremap <leader>me :MerlinErrorCheck<CR>
+    "         nnoremap <leader>mt :MerlinTypeOf<CR>
+    "         nnoremap <leader>ml :MerlinLocate<CR>
+    "     endif
+    "     setl sw=2 sts=2 ts=2 et
+    " endfunction
 
-    autocmd FileType ocaml call <SID>OCamlConf()
+    " autocmd FileType ocaml call <SID>OCamlConf()
 
 
     " Python
