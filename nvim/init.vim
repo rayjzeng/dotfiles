@@ -487,6 +487,8 @@
         nnoremap q: :FHistory:<CR>
 
         nnoremap q/ :FHistory/<CR>
+        
+        nnoremap q? :FHistory?<CR>
 
     " }}
 
