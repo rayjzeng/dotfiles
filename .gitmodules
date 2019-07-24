@@ -1,12 +1,6 @@
 [submodule "tmux/.tmux/plugins/tpm"]
 	path = tmux/.tmux/plugins/tpm
 	url = git@github.com:tmux-plugins/tpm.git
-[submodule "powerline-fonts"]
-	path = dependencies/powerline-fonts
-	url = git@github.com:powerline/fonts.git
-[submodule "zsh/.zprezto"]
-	path = zsh/.zprezto
-	url = git@github.com:rayjzeng/prezto
 [submodule "dependencies/up"]
 	path = dependencies/up
 	url = git@github.com:shannonmoeller/up.git
