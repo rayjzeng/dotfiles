@@ -87,34 +87,23 @@
         Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
         Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
 
-        " " Linting and Completion
-        " Plug 'w0rp/ale'
-        " Plug 'maximbaz/lightline-ale'
+        " language server
+        Plug 'prabirshrestha/asyncomplete.vim'
+        Plug 'prabirshrestha/async.vim'
+        Plug 'prabirshrestha/vim-lsp'
+        Plug 'prabirshrestha/asyncomplete-lsp.vim'
 
-        " " better autocomplete for neovim
-        " if (python3_version >= 306)
-        "     if s:nvim
-        "         Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-        "     else
-        "       Plug 'Shougo/deoplete.nvim'
-        "       Plug 'roxma/nvim-yarp'
-        "       Plug 'roxma/vim-hug-neovim-rpc'
-        "     endif
-        " endif
+        " sources
+        Plug 'Shougo/neco-vim'
+        Plug 'prabirshrestha/asyncomplete-necovim.vim'
+        Plug 'Shougo/neco-syntax'
+        Plug 'prabirshrestha/asyncomplete-necosyntax.vim'
 
     " }}
 
     " Language plugins {{
 
-        " OCaml
-        " Plug 'copy/deoplete-ocaml'
-        " Plug 'rgrinberg/vim-ocaml'
-
-        " Python
-        " Plug 'zchee/deoplete-jedi'
-
-        " Javascript
-        " Plug 'pangloss/vim-javascript'
+        Plug 'sheerun/vim-polyglot'
 
     " }}
 
@@ -309,7 +298,9 @@
 
         " Change Working Directory to that of the current file
         cmap cwd lcd %:p:h
-        cmap cd. lcd %:p:h
+
+        " command-line editing
+        cnoremap <C-A> <Home>
 
     " }}
 
@@ -375,92 +366,40 @@
 
     " }}
 
-    " " ALE {{
+    " language server registration {{
 
-    "     let g:ale_lint_on_text_changed = 'never'
-    "     let g:ale_lint_on_enter = 0
-    "     let g:ale_lint_on_save = 1
+        let g:asyncomplete_auto_popup = 0
 
-    "     function! s:ale_toggle()
-    "         if g:ale_enabled
-    "             echo "Disabling ALE."
-    "         else
-    "             echo "Enabling ALE."
-    "         endif
-    "         execute 'ALEToggle'
-    "     endfunction
-    "     nmap <F4> :call <SID>ale_toggle()<CR>
+        inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
+        inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
+        inoremap <expr> <cr>    pumvisible() ? "\<C-y>" : "\<cr>"
+        imap <c-space>      <Plug>(asyncomplete_force_refresh)
 
-    "     " Linting shortcuts
-    "     nmap <leader>al <Plug>(ale_lint)
-    "     nmap <leader>ar <Plug>(ale_reset_buffer)
-    "     nmap <leader>ad <Plug>(ale_detail)
-    "     nmap <leader>aa <Plug>(ale_next_wrap)
-    "     nmap <leader>aA <Plug>(ale_previous_wrap)
+        " vim source
+        au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necovim#get_source_options({
+            \ 'name': 'necovim',
+            \ 'whitelist': ['vim'],
+            \ 'completor': function('asyncomplete#sources#necovim#completor'),
+            \ }))
 
-    " " }}
+        " syntax source
+        au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necosyntax#get_source_options({
+            \ 'name': 'necosyntax',
+            \ 'whitelist': ['*'],
+            \ 'completor': function('asyncomplete#sources#necosyntax#completor'),
+            \ }))
 
-    " " deoplete {{
-    " if (python3_version >= 306)
+        " python source
+        if executable('pyls')
+            " pip install python-language-server
+            au User lsp_setup call lsp#register_server({
+                \ 'name': 'pyls',
+                \ 'cmd': {server_info->['pyls']},
+                \ 'whitelist': ['python'],
+                \ })
+        endif
 
-    "     " Enable deoplete
-    "     let s:deo_enabled = 1
-    "     let g:deoplete#enable_at_startup = s:deo_enabled
-
-    "     " Set options
-    "     call deoplete#custom#option('smart_case', 1)
-
-    "     " Enable autocompletion popup
-    "     let s:auto_enabled = 1
-    "     call deoplete#custom#option('auto_complete', s:auto_enabled)
-
-    "     " Toggle deoplete
-    "     function! s:deo_toggle()
-    "         if s:deo_enabled
-    "             echo 'Disabling deoplete.'
-    "             call deoplete#disable()
-    "         else
-    "             echo 'Enabling deoplete.'
-    "             call deoplete#enable()
-    "         endif
-    "         let s:deo_enabled = !s:deo_enabled
-    "     endfunction
-    "     command! DeoToggle call s:deo_toggle()
-    "     nnoremap <silent> <F2> :DeoToggle<CR>
-
-    "     " Toggle auto complete
-    "     function! s:deo_auto_toggle()
-    "         if s:auto_enabled
-    "             echo 'Disabling tab complete.'
-    "         else
-    "             echo 'Enabling tab complete.'
-    "         endif
-    "         let s:auto_enabled = !s:auto_enabled
-    "         call deoplete#custom#option({ 'auto_complete': s:auto_enabled })
-    "     endfunction
-    "     command! DeoAuto call s:deo_auto_toggle()
-    "     nnoremap <silent> <F3> :DeoAuto<CR>
-
-    "     " Completion keybindings
-    "     inoremap <silent><expr> <C-p> deoplete#mappings#manual_complete()
-    "     inoremap <silent><expr> <C-h> deoplete#smart_close_popup() . "\<C-h>"
-    "     inoremap <silent><expr> <C-g> deoplete#undo_completion()
-    "     inoremap <silent><expr> <TAB>
-    "                 \ pumvisible() ? "\<C-n>" : "\<TAB>"
-    "     inoremap <silent><expr> <S-TAB>
-    "                 \ pumvisible() ? "\<C-p>" : "\<S-TAB>"
-
-    "     " Omni source config for languages
-    "     call deoplete#custom#option('ignore_sources',
-    "                 \ {
-    "                 \   'ocaml': ['buffer', 'around', 'member', 'tag'],
-    "                 \ })
-
-    "     " custom sources
-    "     call deoplete#custom#source('jedi', 'show_docstring', 1)
-
-    " endif
-    " " }}
+    " }}
 
     " fzf {{
 
@@ -468,26 +407,16 @@
 
         " Find files in cwd
         nnoremap <C-p> :FZF<CR>
-
         " Find lines in open buffers (note <C-/> is mapped to <C-_>)
         nnoremap <C-_> :FLines<CR>
-
         " Buffers
         nnoremap <leader>b :FBuffers<CR>
-
-        " Tabs
-        nnoremap <leader>t :FWindows<CR>
-
         " Marks
         nnoremap <leader>m :FMarks<CR>
-
         " History
-        nnoremap <leader>h :FHistory<CR>
-
+        nnoremap qf :FHistory<CR>
         nnoremap q: :FHistory:<CR>
-
         nnoremap q/ :FHistory/<CR>
-        
         nnoremap q? :FHistory?<CR>
 
     " }}
@@ -499,38 +428,5 @@
 " }}
 
 " lang-config {{
-
-    " OCaml
-    " let s:opam = 0
-    " if executable('opam')
-    "     let s:opamshare = substitute(system('opam config var share'),'\n$','','''')
-    "     execute 'set rtp^=' . s:opamshare . '/ocp-indent/vim'
-    "     execute 'set rtp+=' . s:opamshare . '/merlin/vim'
-    "     let s:opam = 1
-    " endif
-
-    " " Configure only when writing OCaml
-    " function! s:OCamlConf()
-    "     if s:opam
-    "         nnoremap <leader>me :MerlinErrorCheck<CR>
-    "         nnoremap <leader>mt :MerlinTypeOf<CR>
-    "         nnoremap <leader>ml :MerlinLocate<CR>
-    "     endif
-    "     setl sw=2 sts=2 ts=2 et
-    " endfunction
-
-    " autocmd FileType ocaml call <SID>OCamlConf()
-
-
-    " Python
-    autocmd FileType python setl sw=4 sts=4 ts=4 et
-
-
-    " Javascript
-    autocmd FileType javascript setl sw=4 sts=4 ts=4 et
-
-
-    " HTML
-    autocmd FileType html setl sw=2 sts=2 ts=2 et
 
 " }}
