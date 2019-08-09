@@ -47,8 +47,9 @@
 
     " ui elements {{
 
-        " Onedark theme
-        Plug 'joshdick/onedark.vim'
+        " themes
+        Plug 'connorholyday/vim-snazzy'
+        Plug 'morhetz/gruvbox'
 
         " Distraction free mode
         Plug 'junegunn/goyo.vim'
@@ -67,7 +68,6 @@
         Plug 'tpope/vim-sleuth'
 
         " Movement
-        Plug 'justinmk/vim-sneak'
         Plug 'unblevable/quick-scope'
 
         " Text manipulation
@@ -87,23 +87,40 @@
         Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
         Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
 
-        " language server
-        Plug 'prabirshrestha/asyncomplete.vim'
-        Plug 'prabirshrestha/async.vim'
-        Plug 'prabirshrestha/vim-lsp'
-        Plug 'prabirshrestha/asyncomplete-lsp.vim'
+        " ale
+        Plug 'w0rp/ale'
+        Plug 'maximbaz/lightline-ale'
 
-        " sources
-        Plug 'Shougo/neco-vim'
-        Plug 'prabirshrestha/asyncomplete-necovim.vim'
-        Plug 'Shougo/neco-syntax'
-        Plug 'prabirshrestha/asyncomplete-necosyntax.vim'
+        " ncm2
+        Plug 'ncm2/ncm2'
+        Plug 'roxma/nvim-yarp'
+        if !s:nvim
+            Plug 'roxma/vim-hug-neovim-rpc'
+        endif
+
+        " general completion sourcees
+        Plug 'ncm2/ncm2-bufword'
+        Plug 'ncm2/ncm2-path'
+        Plug 'Shougo/neco-syntax' | Plug 'ncm2/ncm2-syntax'
+
+        " snippets
+        Plug 'SirVer/ultisnips'
+        Plug 'honza/vim-snippets'
+        Plug 'ncm2/ncm2-ultisnips'
 
     " }}
 
     " Language plugins {{
 
         Plug 'sheerun/vim-polyglot'
+
+        " language server
+        Plug 'prabirshrestha/async.vim'
+        Plug 'prabirshrestha/vim-lsp'
+        Plug 'ncm2/ncm2-vim-lsp'
+
+        " vimscript completion
+        Plug 'Shougo/neco-vim' | Plug 'ncm2/ncm2-vim'
 
     " }}
 
@@ -138,6 +155,7 @@
 
     set winminheight=0              " Windows can be 0 line high
     set scrolloff=1                 " min lines above/below cursor
+    set sidescrolloff=1             " min columns left/right cursor
 
     set colorcolumn=80              " visual ruler
     set cursorline                  " highlight cursor line
@@ -151,8 +169,12 @@
     endif
 
     " theme
-    let g:onedark_termcolors=16
-    colorscheme onedark
+    set background=dark
+    let g:gruvbox_contrast_dark="hard"
+    let g:gruvbox_contrast_light="medium"
+    let g:gruvbox_sign_column="bg0"
+    let g:gruvbox_invert_selection=0
+    colorscheme gruvbox
 
     " Line numbering
     set number
@@ -173,6 +195,7 @@
     set hlsearch                    " Highlight search terms
     set ignorecase                  " Case insensitive search
     set smartcase                   " Case sensitive when uc present
+    let @/ = ""                     " clear last search when sourcing this file
 
     " show previews for search and replace
     if s:nvim
@@ -222,6 +245,8 @@
 
 " remappings {{
 
+    " note <C-/> is mapped as <C-_>
+
     " General keyboard remappings
     let mapleader = ' '
     inoremap jk <ESC>
@@ -232,20 +257,33 @@
         " create splits
         nnoremap <leader>v <C-w>v <C-w>l
         nnoremap <leader>V :botright vsplit<CR> <C-w>j
-        nnoremap <leader>s <C-w>s <C-w>j
-        nnoremap <leader>S :botright split<CR> <C-w>j
+        nnoremap <leader>x <C-w>s <C-w>j
+        nnoremap <leader>X :botright split<CR> <C-w>j
 
         nnoremap <leader>= <C-w>=
 
         " quick navigation
-        nnoremap <C-J> <C-W><C-J>
-        nnoremap <C-K> <C-W><C-K>
-        nnoremap <C-L> <C-W><C-L>
-        nnoremap <C-H> <C-W><C-H>
+        nnoremap <C-J> <C-W>j
+        nnoremap <C-K> <C-W>k
+        nnoremap <C-L> <C-W>l
+        nnoremap <C-H> <C-W>h
+        nnoremap <C-Q> <C-W>q
 
         " Easy buffer switching
-        nnoremap <silent> gb :bn<CR>
-        nnoremap <silent> gB :bp<CR>
+        nnoremap gb :bn<CR>
+        nnoremap gB :bp<CR>
+        nnoremap gw :bd<CR>
+
+        " Jump to tab number
+        nnoremap g1 1gt
+        nnoremap g2 2gt
+        nnoremap g3 3gt
+        nnoremap g4 4gt
+        nnoremap g5 5gt
+        nnoremap g6 6gt
+        nnoremap g7 7gt
+        nnoremap g8 8gt
+        nnoremap g9 9gt
 
     " }}
 
@@ -290,8 +328,11 @@
         endfun
 
         " strip whitespace at eol
-		command! TrimWhitespace call s:TrimWhitespace()
+        command! TrimWhitespace call s:TrimWhitespace()
         nnoremap <leader>w :TrimWhitespace<CR>
+
+        " retab
+        nnoremap <leader>r :retab<CR>
 
         " Open current buffer as root
         cnoremap w!! w !sudo tee % >/dev/null
@@ -302,13 +343,15 @@
         " command-line editing
         cnoremap <C-A> <Home>
 
+        tnoremap <C-[> <C-\><C-n>
+
     " }}
 
     " config editing {{
 
-        nnoremap <silent> <leader><leader>s
+        nnoremap <leader><leader>s
                     \ :source ~/.config/nvim/init.vim<CR>
-        nnoremap <silent> <leader><leader>e
+        nnoremap <leader><leader>e
                     \ :e ~/.config/nvim/init.vim<CR>
 
         " config filetypes
@@ -334,7 +377,7 @@
     " lightline {{
 
         let g:lightline = {
-                    \ 'colorscheme': 'one',
+                    \ 'colorscheme': 'gruvbox',
                     \ 'active': {
                     \   'left':[
                     \       [ 'mode', 'paste' ],
@@ -366,30 +409,25 @@
 
     " }}
 
+    " ALE {{
+
+        let g:ale_lint_on_text_changed = 'never'
+        let g:ale_lint_on_enter = 0
+        let g:ale_lint_on_save = 1
+
+        " Linting shortcuts
+        nmap <leader>al <Plug>(ale_lint)
+        nmap <leader>ar <Plug>(ale_reset_buffer)
+        nmap <leader>ad <Plug>(ale_detail)
+        nmap <leader>an <Plug>(ale_next_wrap)
+        nmap <leader>ap <Plug>(ale_previous_wrap)
+
+    " }}
+
     " language server registration {{
 
-        let g:asyncomplete_auto_popup = 0
+        let g:lsp_diagnostics_enabled = 0
 
-        inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
-        inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-        inoremap <expr> <cr>    pumvisible() ? "\<C-y>" : "\<cr>"
-        imap <c-space>      <Plug>(asyncomplete_force_refresh)
-
-        " vim source
-        au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necovim#get_source_options({
-            \ 'name': 'necovim',
-            \ 'whitelist': ['vim'],
-            \ 'completor': function('asyncomplete#sources#necovim#completor'),
-            \ }))
-
-        " syntax source
-        au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necosyntax#get_source_options({
-            \ 'name': 'necosyntax',
-            \ 'whitelist': ['*'],
-            \ 'completor': function('asyncomplete#sources#necosyntax#completor'),
-            \ }))
-
-        " python source
         if executable('pyls')
             " pip install python-language-server
             au User lsp_setup call lsp#register_server({
@@ -401,28 +439,91 @@
 
     " }}
 
-    " fzf {{
+    " asyncomplete {{
 
-        let g:fzf_command_prefix = 'F'
+        " let g:asyncomplete_auto_popup = 0
 
-        " Find files in cwd
-        nnoremap <C-p> :FZF<CR>
-        " Find lines in open buffers (note <C-/> is mapped to <C-_>)
-        nnoremap <C-_> :FLines<CR>
-        " Buffers
-        nnoremap <leader>b :FBuffers<CR>
-        " Marks
-        nnoremap <leader>m :FMarks<CR>
-        " History
-        nnoremap qf :FHistory<CR>
-        nnoremap q: :FHistory:<CR>
-        nnoremap q/ :FHistory/<CR>
-        nnoremap q? :FHistory?<CR>
+        " inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
+        " inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
+        " inoremap <expr> <cr>    pumvisible() ? "\<C-y>" : "\<cr>"
+        " imap <c-space>      <Plug>(asyncomplete_force_refresh)
+
+        " " vim source
+        " au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necovim#get_source_options({
+        "     \ 'name': 'necovim',
+        "     \ 'whitelist': ['vim'],
+        "     \ 'completor': function('asyncomplete#sources#necovim#completor'),
+        "     \ }))
+
+        " " syntax source
+        " au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necosyntax#get_source_options({
+        "     \ 'name': 'necosyntax',
+        "     \ 'whitelist': ['*'],
+        "     \ 'completor': function('asyncomplete#sources#necosyntax#completor'),
+        "     \ }))
 
     " }}
 
-    " sneak {{
-        let g:sneak#label = 1
+    " ncm2 {{
+
+        " enable ncm2 for all buffers
+        autocmd BufEnter * call ncm2#enable_for_buffer()
+
+        set completeopt=noinsert,menuone,noselect
+        " suppress the annoying 'match x of y', 'The only match'
+        " and 'Pattern not found' messages
+        set shortmess+=c
+
+        " CTRL-C doesn't trigger the InsertLeave autocmd . map to <ESC> instead.
+        inoremap <C-c> <ESC>
+
+        " Popup menu settings
+        let g:ncm2#auto_popup = 0
+        let g:ncm2#popup_limit = 10
+        let g:ncm#total_popup_limit = 10
+
+        " Use CTRL-Space to trigger completion
+        inoremap <C-Space> <C-r>=ncm2#manual_trigger()<CR>
+
+        " Use <TAB> to select the popup menu:
+        inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
+        inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
+
+        inoremap <expr> <C-j> pumvisible() ? "\<C-n>" : "\<C-j>"
+        inoremap <expr> <C-k> pumvisible() ? "\<C-p>" : "\<C-k>"
+
+    " }}
+
+    " ultisnips {{
+
+        inoremap <silent> <expr> <CR> ncm2_ultisnips#expand_or("\<CR>", 'n')
+        let g:UltiSnipsExpandTrigger        = "<Plug>(ultisnips_expand)"
+        let g:UltiSnipsJumpForwardTrigger   = "<C-j>"
+        let g:UltiSnipsJumpBackwardTrigger  = "<C-k>"
+        let g:UltiSnipsRemoveSelectModeMappings = 0
+
+    "" }}
+
+    " fzf {{
+
+        let g:fzf_command_prefix = 'F'
+        nnoremap s <Nop>
+
+        nnoremap sf :FZF<CR>
+        nnoremap sh :FHistory<CR>
+        nnoremap sm :FMarks<CR>
+        nnoremap sr :FTags<CR>
+        nnoremap s: :FHistory:<CR>
+
+        " Search
+        nnoremap sg :FRg<Space>
+        nnoremap s/ :FBLines<Space>
+        nnoremap s? :FLines<Space>
+
+        " Buffers
+        nnoremap ss :FBuffers<CR>
+        nnoremap S :FWindows<CR>
+
     " }}
 
 " }}

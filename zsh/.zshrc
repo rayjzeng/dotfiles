@@ -28,8 +28,8 @@ alias e="$EDITOR"
 
 # FZF
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='fd -I -H -E ".git/*"'
-export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_DEFAULT_COMMAND='fd -H'
+export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
 
 # Up
 source $HOME/dotfiles/dependencies/up/up.sh
@@ -50,6 +50,8 @@ alias la="ls -A"
 
 alias treed="tree -d"
 alias treel="tree -L"
+
+alias zsource="source $HOME/.zshrc"
 
 #
 # Additional configurations

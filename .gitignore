@@ -1,6 +1,3 @@
-# vim plugins
-vim/.vim/plugged/
-
 # tmux plugins
 !tmux/.tmux/plugins
 tmux/.tmux/plugins/*
