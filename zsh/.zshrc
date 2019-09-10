@@ -52,6 +52,8 @@ alias treed="tree -d"
 alias treel="tree -L"
 
 alias zsource="source $HOME/.zshrc"
+alias zedit="e $HOME/.zshrc"
+alias zeditl="e $HOME/.local.sh"
 
 #
 # Additional configurations
