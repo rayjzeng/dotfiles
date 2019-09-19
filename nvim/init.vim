@@ -45,86 +45,82 @@
 
     call plug#begin('~/.config/nvim/plugged')
 
-    " ui elements {{
+    " themes
+    Plug 'connorholyday/vim-snazzy'
+    Plug 'morhetz/gruvbox'
 
-        " themes
-        Plug 'connorholyday/vim-snazzy'
-        Plug 'morhetz/gruvbox'
+    " Distraction free mode
+    Plug 'junegunn/goyo.vim'
 
-        " Distraction free mode
-        Plug 'junegunn/goyo.vim'
+    " Statusline
+    Plug 'itchyny/lightline.vim'
 
-        " Statusline
-        Plug 'itchyny/lightline.vim'
+    " directory navigator
+    Plug 'justinmk/vim-dirvish'
 
-        " directory navigator
-        Plug 'justinmk/vim-dirvish'
+    " Auto intent detection
+    Plug 'tpope/vim-sleuth'
 
-    " }}
+    " Movement
+    Plug 'unblevable/quick-scope'
 
-    " text editing {{
+    " Text manipulation
+    Plug 'tpope/vim-surround'
+    Plug 'tpope/vim-commentary'
+    Plug 'tpope/vim-repeat'
 
-        " Auto intent detection
-        Plug 'tpope/vim-sleuth'
+    " Git integration
+    Plug 'tpope/vim-fugitive'
+    Plug 'mhinz/vim-signify'
 
-        " Movement
-        Plug 'unblevable/quick-scope'
+    " fzf
+    Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
+    Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
 
-        " Text manipulation
-        Plug 'tpope/vim-surround'
-        Plug 'tpope/vim-commentary'
-        Plug 'tpope/vim-repeat'
+    " ale
+    Plug 'w0rp/ale'
+    Plug 'maximbaz/lightline-ale'
 
-    " }}
+    Plug 'sheerun/vim-polyglot'
 
-    " integrations {{
+    " ncm2
+    Plug 'ncm2/ncm2'
+    Plug 'roxma/nvim-yarp'
+    Plug 'roxma/vim-hug-neovim-rpc', s:nvim ? {} : { 'on': [] }
 
-        " Git integration
-        Plug 'tpope/vim-fugitive'
-        Plug 'mhinz/vim-signify'
+    " general completion sourcees
+    Plug 'ncm2/ncm2-bufword'
+    Plug 'ncm2/ncm2-path'
+    Plug 'Shougo/neco-syntax' | Plug 'ncm2/ncm2-syntax'
 
-        " fzf
-        Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
-        Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
+    " snippets
+    Plug 'SirVer/ultisnips'
+    Plug 'honza/vim-snippets'
+    Plug 'ncm2/ncm2-ultisnips'
 
-        " ale
-        Plug 'w0rp/ale'
-        Plug 'maximbaz/lightline-ale'
+    " language server
+    Plug 'autozimu/LanguageClient-neovim', {
+        \ 'branch': 'next',
+        \ 'do': 'bash install.sh',
+        \ }
 
-        " ncm2
-        Plug 'ncm2/ncm2'
-        Plug 'roxma/nvim-yarp'
-        if !s:nvim
-            Plug 'roxma/vim-hug-neovim-rpc'
-        endif
-
-        " general completion sourcees
-        Plug 'ncm2/ncm2-bufword'
-        Plug 'ncm2/ncm2-path'
-        Plug 'Shougo/neco-syntax' | Plug 'ncm2/ncm2-syntax'
-
-        " snippets
-        Plug 'SirVer/ultisnips'
-        Plug 'honza/vim-snippets'
-        Plug 'ncm2/ncm2-ultisnips'
-
-    " }}
-
-    " Language plugins {{
-
-        Plug 'sheerun/vim-polyglot'
-
-        " language server
-        Plug 'prabirshrestha/async.vim'
-        Plug 'prabirshrestha/vim-lsp'
-        Plug 'ncm2/ncm2-vim-lsp'
-
-        " vimscript completion
-        Plug 'Shougo/neco-vim' | Plug 'ncm2/ncm2-vim'
-
-    " }}
+    " vimscript completion
+    Plug 'Shougo/neco-vim' | Plug 'ncm2/ncm2-vim'
 
     call plug#end()
+
+    " merlin and ocp-indent
+    let s:opam_share_dir = system("opam config var share")
+    let s:opam_share_dir = substitute(s:opam_share_dir, '[\r\n]*$', '', '')
+    let s:merlin_dir = s:opam_share_dir . "/merlin/vim"
+    if isdirectory(s:merlin_dir)
+        execute "set rtp^=" . s:merlin_dir
+    endif
+
+    let s:ocp_indent_dir = s:opam_share_dir . "/ocp-indent/vim"
+    if isdirectory(s:ocp_indent_dir)
+        execute "set rtp^=" . s:ocp_indent_dir
+    endif
 
 " }}
 
@@ -164,9 +160,9 @@
     set splitbelow                  " open splits to bottom
 
     " 24 bit color set when available
-    if $TERM =~# '.*256.*\|kitty' && $COLORTERM ==# 'truecolor'
-        set termguicolors
-    endif
+    " if $TERM =~# '.*256.*\|kitty' && $COLORTERM ==# 'truecolor'
+    "     set termguicolors
+    " endif
 
     " theme
     set background=dark
@@ -424,46 +420,6 @@
 
     " }}
 
-    " language server registration {{
-
-        let g:lsp_diagnostics_enabled = 0
-
-        if executable('pyls')
-            " pip install python-language-server
-            au User lsp_setup call lsp#register_server({
-                \ 'name': 'pyls',
-                \ 'cmd': {server_info->['pyls']},
-                \ 'whitelist': ['python'],
-                \ })
-        endif
-
-    " }}
-
-    " asyncomplete {{
-
-        " let g:asyncomplete_auto_popup = 0
-
-        " inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
-        " inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-        " inoremap <expr> <cr>    pumvisible() ? "\<C-y>" : "\<cr>"
-        " imap <c-space>      <Plug>(asyncomplete_force_refresh)
-
-        " " vim source
-        " au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necovim#get_source_options({
-        "     \ 'name': 'necovim',
-        "     \ 'whitelist': ['vim'],
-        "     \ 'completor': function('asyncomplete#sources#necovim#completor'),
-        "     \ }))
-
-        " " syntax source
-        " au User asyncomplete_setup call asyncomplete#register_source(asyncomplete#sources#necosyntax#get_source_options({
-        "     \ 'name': 'necosyntax',
-        "     \ 'whitelist': ['*'],
-        "     \ 'completor': function('asyncomplete#sources#necosyntax#completor'),
-        "     \ }))
-
-    " }}
-
     " ncm2 {{
 
         " enable ncm2 for all buffers
@@ -492,6 +448,14 @@
 
         inoremap <expr> <C-j> pumvisible() ? "\<C-n>" : "\<C-j>"
         inoremap <expr> <C-k> pumvisible() ? "\<C-p>" : "\<C-k>"
+
+    " }}
+
+    " language server registration {{
+
+        let g:LanguageClient_serverCommands = {
+            \ 'python': ['pyls'],
+            \ }
 
     " }}
 
@@ -529,44 +493,3 @@
 
 " }}
 
-" lang-config {{
-
-" ## added by OPAM user-setup for vim / base ## 93ee63e278bdfc07d1139a748ed3fff2 ## you can edit, but keep this line
-let s:opam_share_dir = system("opam config var share")
-let s:opam_share_dir = substitute(s:opam_share_dir, '[\r\n]*$', '', '')
-
-let s:opam_configuration = {}
-
-function! OpamConfOcpIndent()
-  execute "set rtp^=" . s:opam_share_dir . "/ocp-indent/vim"
-endfunction
-let s:opam_configuration['ocp-indent'] = function('OpamConfOcpIndent')
-
-function! OpamConfOcpIndex()
-  execute "set rtp+=" . s:opam_share_dir . "/ocp-index/vim"
-endfunction
-let s:opam_configuration['ocp-index'] = function('OpamConfOcpIndex')
-
-function! OpamConfMerlin()
-  let l:dir = s:opam_share_dir . "/merlin/vim"
-  execute "set rtp+=" . l:dir
-endfunction
-let s:opam_configuration['merlin'] = function('OpamConfMerlin')
-
-let s:opam_packages = ["ocp-indent", "ocp-index", "merlin"]
-let s:opam_check_cmdline = ["opam list --installed --short --safe --color=never"] + s:opam_packages
-let s:opam_available_tools = split(system(join(s:opam_check_cmdline)))
-for tool in s:opam_packages
-  " Respect package order (merlin should be after ocp-index)
-  if count(s:opam_available_tools, tool) > 0
-    call s:opam_configuration[tool]()
-  endif
-endfor
-" ## end of OPAM user-setup addition for vim / base ## keep this line
-" ## added by OPAM user-setup for vim / ocp-indent ## a18b2d92d1821d2907b073b38e0a5bd5 ## you can edit, but keep this line
-if count(s:opam_available_tools,"ocp-indent") == 0
-  source "/Users/rayzeng/.opam/4.08.1/share/ocp-indent/vim/indent/ocaml.vim"
-endif
-" ## end of OPAM user-setup addition for vim / ocp-indent ## keep this line
-
-" }}

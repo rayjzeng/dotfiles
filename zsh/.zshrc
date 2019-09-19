@@ -8,6 +8,11 @@ export ZIM_HOME=${ZDOTDIR:-${HOME}}/.zim
 # Start zim
 [[ -s ${ZIM_HOME}/init.zsh ]] && source ${ZIM_HOME}/init.zsh
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  export OS="mac"
+elif [[ "$(uname -s)" == "Linux" ]]; then
+  export OS="linux"
+fi
 
 # disable autocorrection
 unsetopt correct
@@ -28,7 +33,7 @@ alias e="$EDITOR"
 
 # FZF
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='fd -H'
+export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
 export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
 
 # Up
@@ -53,12 +58,12 @@ alias treel="tree -L"
 
 alias zsource="source $HOME/.zshrc"
 alias zedit="e $HOME/.zshrc"
-alias zeditl="e $HOME/.local.sh"
+alias zeditl="e $HOME/.local-$OS.zsh"
 
 #
 # Additional configurations
 #
 
 # Local configuration
-[[ -e ~/.local.sh ]] && source ~/.local.sh
+[[ -e "$HOME/.local-$OS.zsh" ]] && source "$HOME/.local-$OS.zsh"
 
