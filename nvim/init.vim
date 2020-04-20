@@ -1,8 +1,5 @@
-" Modeline and notes {{
-" vim: set sw=4 ts=4 sts=4 et foldmarker={{,}} foldlevel=0 foldmethod=marker:
-"
+" vim: set sw=4 ts=4 sts=4 et fmr={{,}} fdm=marker:
 " Vim config for Ray Zeng.
-" }}
 
 " init {{
 
@@ -86,7 +83,7 @@
     " ncm2
     Plug 'ncm2/ncm2'
     Plug 'roxma/nvim-yarp'
-    Plug 'roxma/vim-hug-neovim-rpc', s:nvim ? {} : { 'on': [] }
+    Plug 'roxma/vim-hug-neovim-rpc'
 
     " general completion sourcees
     Plug 'ncm2/ncm2-bufword'
@@ -178,6 +175,7 @@
         autocmd!
         autocmd InsertEnter * set norelativenumber
         autocmd InsertLeave * set relativenumber
+		autocmd BufEnter * set relativenumber
 
         " disable numbering in terminals
         if s:nvim
@@ -271,15 +269,15 @@
         nnoremap gw :bd<CR>
 
         " Jump to tab number
-        nnoremap g1 1gt
-        nnoremap g2 2gt
-        nnoremap g3 3gt
-        nnoremap g4 4gt
-        nnoremap g5 5gt
-        nnoremap g6 6gt
-        nnoremap g7 7gt
-        nnoremap g8 8gt
-        nnoremap g9 9gt
+        nnoremap <leader>1 1gt
+        nnoremap <leader>2 2gt
+        nnoremap <leader>3 3gt
+        nnoremap <leader>4 4gt
+        nnoremap <leader>5 5gt
+        nnoremap <leader>6 6gt
+        nnoremap <leader>7 7gt
+        nnoremap <leader>8 8gt
+        nnoremap <leader>9 :tabl<CR>
 
     " }}
 
@@ -474,7 +472,7 @@
         let g:fzf_command_prefix = 'F'
         nnoremap s <Nop>
 
-        nnoremap sf :FZF<CR>
+        nnoremap sf :FFiles<CR>
         nnoremap sh :FHistory<CR>
         nnoremap sm :FMarks<CR>
         nnoremap sr :FTags<CR>
@@ -486,6 +484,7 @@
         nnoremap s? :FLines<Space>
 
         " Buffers
+        let g:fzf_buffers_jump = 1  " jump to existing tabs
         nnoremap ss :FBuffers<CR>
         nnoremap S :FWindows<CR>
 
