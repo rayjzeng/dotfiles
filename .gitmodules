@@ -10,3 +10,6 @@
 [submodule "dependencies/fzf.vim"]
 	path = dependencies/fzf.vim
 	url = git@github.com:rayjzeng/fzf.vim.git
+[submodule "zsh2/zsh-clean"]
+	path = zsh2/zsh-clean
+	url = git@github.com:BrandonRoehl/zsh-clean.git
