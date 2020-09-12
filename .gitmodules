@@ -10,6 +10,15 @@
 [submodule "dependencies/fzf.vim"]
 	path = dependencies/fzf.vim
 	url = git@github.com:rayjzeng/fzf.vim.git
-[submodule "zsh2/zsh-clean"]
-	path = zsh2/zsh-clean
+[submodule "zsh2/zmodules/zsh-clean"]
+	path = zsh2/zmodules/zsh-clean
 	url = git@github.com:BrandonRoehl/zsh-clean.git
+[submodule "zsh2/zmodules/zsh-completions"]
+	path = zsh2/zmodules/zsh-completions
+	url = git@github.com:zsh-users/zsh-completions.git
+[submodule "zsh2/zmodules/zsh-syntax-highlighting"]
+	path = zsh2/zmodules/zsh-syntax-highlighting
+	url = git@github.com:zsh-users/zsh-syntax-highlighting.git
+[submodule "zsh2/zmodules/zsh-history-substring-search"]
+	path = zsh2/zmodules/zsh-history-substring-search
+	url = git@github.com:zsh-users/zsh-history-substring-search.git

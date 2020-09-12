@@ -1,7 +1,10 @@
+# vim: set sw=2 ts=2 sts=2 et fmr={{{,}} fdm=marker:
 #
 # User configuration sourced by interactive shells
 # Author: rayjzeng
 #
+
+# env and basic options {{{
 
 # Source local configuration if available
 [[ -e "${ZDOTDIR:-$HOME}/.zsh_local_env.zsh" ]] && source "${ZDOTDIR:-$HOME}/.zsh_local_env.zsh"
@@ -17,31 +20,49 @@ if (( ${+BREWDIR} )); then
   export PATH
 fi
 
-# Set up history
-setopt appendhistory 
-setopt hist_expire_dups_first
-setopt hist_ignore_dups
-setopt hist_ignore_all_dups
-setopt hist_save_no_dups
+# Misc options
+setopt AUTOCD
+unsetopt BEEP
+unsetopt CORRECT
+
+# }}}
+
+# syntax highlighting {{{
+
+source $ZMODULES/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets cursor)
+
+# }}}
+
+# history {{{
+
+setopt APPENDHISTORY 
+setopt EXTENDED_HISTORY
+setopt HIST_EXPIRE_DUPS_FIRST
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_FIND_NO_DUPS
+setopt HIST_SAVE_NO_DUPS
+setopt HIST_VERIFY
+setopt HIST_BEEP
 
 HISTFILE="${ZDOTDIR:-$HOME}/.zsh_history"  # History file location
 HISTSIZE=10000                             # Internal history size
 SAVEHIST=10000                             # History file size
 
-# Misc options
-setopt autocd
-setopt beep
-unsetopt correct
+# use history substring search
+source $ZMODULES/zsh-history-substring-search/zsh-history-substring-search.zsh
 
-# Use zsh-clean theme
-autoload -U promptinit
-fpath=($prompt_themes "$DOTDIR/zsh2/zsh-clean" $fpath)
-promptinit
-prompt clean 256
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+bindkey -M emacs '^P' history-substring-search-up
+bindkey -M emacs '^N' history-substring-search-down
 
-#
-# Keybindings
-#
+HISTORY_SUBSTRING_SEARCH_FUZZY=on
+
+# }}}
+
+# keybindings and completion {{{
 
 # use emacs bindings
 bindkey -e
@@ -58,10 +79,7 @@ function expand_alias() {
 zle -N expand_alias
 bindkey "^ " expand_alias
 
-#
-# Completion
-#
-
+# Completion options
 setopt COMPLETE_IN_WORD    # Complete from both ends of a word.
 setopt ALWAYS_TO_END       # Move cursor to the end of a completed word.
 setopt AUTO_MENU           # Show completion menu on a successive tab press.
@@ -76,9 +94,7 @@ zstyle ':completion::complete:*' use-cache on
 zstyle ':completion::complete:*' cache-path "${ZDOTDIR:-$HOME}/.zcompcache"
 
 # Load completions from zsh-completions
-if whence brew &>/dev/null; then
-  fpath=("$(brew --prefix)/share/zsh-completions" $fpath)
-fi
+fpath=("$ZMODULES/zsh-completions" $fpath)
 
 # Regenerate cache every day or so
 # Explanation of glob:
@@ -94,9 +110,18 @@ else
 fi
 unset _comp_files
 
-#
-# User applications
-#
+# }}}
+
+# prompt {{{
+
+autoload -U promptinit
+fpath=($prompt_themes "$ZMODULES/zsh-clean" $fpath)
+promptinit
+prompt clean 256
+
+# }}}
+
+# user applications {{{
 
 # Default editors
 if whence nvim &>/dev/null; then
@@ -114,4 +139,6 @@ export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
 export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
 
 # Up
-source $HOME/dotfiles/dependencies/up/up.sh
+source $DOTDIR/dependencies/up/up.sh
+
+# }}}
