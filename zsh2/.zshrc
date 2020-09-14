@@ -1,4 +1,4 @@
-# vim: set sw=2 ts=2 sts=2 et fmr={{{,}} fdm=marker:
+# vim: set sw=2 ts=2 sts=2 et fdm=marker:
 #
 # User configuration sourced by interactive shells
 # Author: rayjzeng
@@ -20,10 +20,84 @@ if (( ${+BREWDIR} )); then
   export PATH
 fi
 
-# Misc options
+# }}}
+
+# editor {{{
+
 setopt AUTOCD
 unsetopt BEEP
 unsetopt CORRECT
+
+# directory stack
+DIRSTACKSIZE=10
+setopt autopushd pushdminus pushdsilent pushdtohome
+
+# FZF
+[[ -f "$HOME/.fzf.zsh" ]] && source "$HOME/.fzf.zsh"
+export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
+export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
+
+# z.lua
+zlua_path="$DOTDIR/dependencies/z.lua/z.lua"
+if [[ -f "$zlua_path" ]]; then
+  eval "$(lua ${zlua_path} --init zsh)"
+
+  export _ZL_MATCH_MODE=1  # use enhanced matching so z acts like cd for unvisited directories
+
+  alias zb="z -b"
+  alias zf="z -I"
+  alias zbf="z -b -I"
+fi
+unset zlua_path
+
+# Use human-friendly identifiers.
+zmodload -F zsh/terminfo +b:echoti +p:terminfo
+typeset -gA key_info
+key_info=(
+  'Control'      '\C-'
+  'ControlLeft'  '\e[1;5D \e[5D \e\e[D \eOd \eOD'
+  'ControlRight' '\e[1;5C \e[5C \e\e[C \eOc \eOC'
+  'Escape'       '\e'
+  'Meta'         '\M-'
+  'Backspace'    "${terminfo[kbs]}"
+  'BackTab'      "${terminfo[kcbt]}"
+  'Left'         "${terminfo[kcub1]}"
+  'Down'         "${terminfo[kcud1]}"
+  'Right'        "${terminfo[kcuf1]}"
+  'Up'           "${terminfo[kcuu1]}"
+  'Delete'       "${terminfo[kdch1]}"
+  'End'          "${terminfo[kend]}"
+  'F1'           "${terminfo[kf1]}"
+  'F2'           "${terminfo[kf2]}"
+  'F3'           "${terminfo[kf3]}"
+  'F4'           "${terminfo[kf4]}"
+  'F5'           "${terminfo[kf5]}"
+  'F6'           "${terminfo[kf6]}"
+  'F7'           "${terminfo[kf7]}"
+  'F8'           "${terminfo[kf8]}"
+  'F9'           "${terminfo[kf9]}"
+  'F10'          "${terminfo[kf10]}"
+  'F11'          "${terminfo[kf11]}"
+  'F12'          "${terminfo[kf12]}"
+  'Home'         "${terminfo[khome]}"
+  'Insert'       "${terminfo[kich1]}"
+  'PageDown'     "${terminfo[knp]}"
+  'PageUp'       "${terminfo[kpp]}"
+)
+
+# use emacs bindings
+bindkey -e
+
+# Bind <Shift-Tab> to go to the previous menu item.
+if [[ -n ${key_info[BackTab]} ]] bindkey ${key_info[BackTab]} reverse-menu-complete
+
+# fix some keys
+if [[ -n ${key_info[Home]} ]] bindkey ${key_info[Home]} beginning-of-line
+if [[ -n ${key_info[End]} ]] bindkey ${key_info[End]} end-of-line
+if [[ -n ${key_info[PageUp]} ]] bindkey ${key_info[PageUp]} up-line-or-history
+if [[ -n ${key_info[PageDown]} ]] bindkey ${key_info[PageDown]} down-line-or-history
+if [[ -n ${key_info[Insert]} ]] bindkey ${key_info[Insert]} overwrite-mode
+if [[ -n ${key_info[Delete]} ]] bindkey ${key_info[Delete]} delete-char
 
 # }}}
 
@@ -36,7 +110,7 @@ ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets cursor)
 
 # history {{{
 
-setopt APPENDHISTORY 
+setopt APPENDHISTORY
 setopt EXTENDED_HISTORY
 setopt HIST_EXPIRE_DUPS_FIRST
 setopt HIST_IGNORE_DUPS
@@ -62,24 +136,8 @@ HISTORY_SUBSTRING_SEARCH_FUZZY=on
 
 # }}}
 
-# keybindings and completion {{{
+# completion {{{
 
-# use emacs bindings
-bindkey -e
-
-# Expand aliases with <C-Space>
-function expand_alias() {
-  if [[ $LBUFFER =~ '[A-Za-z0-9_]+$' ]]; then
-    zle _expand_alias
-    zle expand-word
-  fi
-  zle magic-space
-}
-
-zle -N expand_alias
-bindkey "^ " expand_alias
-
-# Completion options
 setopt COMPLETE_IN_WORD    # Complete from both ends of a word.
 setopt ALWAYS_TO_END       # Move cursor to the end of a completed word.
 setopt AUTO_MENU           # Show completion menu on a successive tab press.
@@ -121,7 +179,19 @@ prompt clean 256
 
 # }}}
 
-# user applications {{{
+# additional aliases {{{
+
+# Expand aliases with <C-Space>
+function expand_alias() {
+  if [[ $LBUFFER =~ '[A-Za-z0-9_]+$' ]]; then
+    zle _expand_alias
+    zle expand-word
+  fi
+  zle magic-space
+}
+
+zle -N expand_alias
+bindkey "^ " expand_alias
 
 # Default editors
 if whence nvim &>/dev/null; then
@@ -132,13 +202,5 @@ elif whence vim &>/dev/null; then
   export VISUAL='vim'
 fi
 alias e="$EDITOR"
-
-# FZF
-[ -f "$HOME/.fzf.zsh" ] && source "$HOME/.fzf.zsh"
-export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
-export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
-
-# Up
-source $DOTDIR/dependencies/up/up.sh
 
 # }}}
