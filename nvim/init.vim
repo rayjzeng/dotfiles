@@ -72,7 +72,7 @@
 
     " fzf
     Plug 'junegunn/fzf'
-    Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
+    Plug '~/.config/nvim/fzf.vim'
 
     " ale
     let g:ale_disable_lsp = 1

@@ -2,7 +2,7 @@
 	path = tmux/.tmux/plugins/tpm
 	url = git@github.com:tmux-plugins/tpm.git
 [submodule "dependencies/fzf.vim"]
-	path = dependencies/fzf.vim
+	path = nvim/fzf.vim
 	url = git@github.com:rayjzeng/fzf.vim.git
 [submodule "zsh2/zmodules/zsh-clean"]
 	path = zsh/.zmodules/zsh-clean
