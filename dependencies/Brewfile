@@ -9,5 +9,6 @@ brew "neovim"
 brew "node@10", link: true
 brew "python@3.8"
 brew "ripgrep"
+brew "stow"
 brew "tmux"
 brew "trash"

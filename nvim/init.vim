@@ -71,53 +71,18 @@
     Plug 'mhinz/vim-signify'
 
     " fzf
-    Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
+    Plug 'junegunn/fzf'
     Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
 
     " ale
-    Plug 'w0rp/ale'
+    let g:ale_disable_lsp = 1
+    Plug 'dense-analysis/ale'
     Plug 'maximbaz/lightline-ale'
 
+    " syntax
     Plug 'sheerun/vim-polyglot'
 
-    " ncm2
-    Plug 'ncm2/ncm2'
-    Plug 'roxma/nvim-yarp'
-    Plug 'roxma/vim-hug-neovim-rpc'
-
-    " general completion sourcees
-    Plug 'ncm2/ncm2-bufword'
-    Plug 'ncm2/ncm2-path'
-    Plug 'Shougo/neco-syntax' | Plug 'ncm2/ncm2-syntax'
-
-    " snippets
-    Plug 'SirVer/ultisnips'
-    Plug 'honza/vim-snippets'
-    Plug 'ncm2/ncm2-ultisnips'
-
-    " language server
-    Plug 'autozimu/LanguageClient-neovim', {
-        \ 'branch': 'next',
-        \ 'do': 'bash install.sh',
-        \ }
-
-    " vimscript completion
-    Plug 'Shougo/neco-vim' | Plug 'ncm2/ncm2-vim'
-
     call plug#end()
-
-    " merlin and ocp-indent
-    let s:opam_share_dir = system("opam config var share")
-    let s:opam_share_dir = substitute(s:opam_share_dir, '[\r\n]*$', '', '')
-    let s:merlin_dir = s:opam_share_dir . "/merlin/vim"
-    if isdirectory(s:merlin_dir)
-        execute "set rtp^=" . s:merlin_dir
-    endif
-
-    let s:ocp_indent_dir = s:opam_share_dir . "/ocp-indent/vim"
-    if isdirectory(s:ocp_indent_dir)
-        execute "set rtp^=" . s:ocp_indent_dir
-    endif
 
 " }}
 
@@ -226,13 +191,14 @@
     endif
 
     " set undo and backup when using neovim
-    if s:nvim
-        " set backup
-        if has('persistent_undo')
-            set undofile                " So is persistent undo ...
-            set undolevels=1000         " Maximum number of changes that can be undone
-            set undoreload=10000        " Maximum number lines to save for undo on a buffer reload
+    if has('persistent_undo')
+        if !s:nvim
+            call mkdir($HOME.'/.local/share/vim/undo', 'p')
+            set undodir=$HOME/.local/share/vim/undo
         endif
+        set undofile                " So is persistent undo ...
+        set undolevels=1000         " Maximum number of changes that can be undone
+        set undoreload=10000        " Maximum number lines to save for undo on a buffer reload
     endif
 
 " }}
@@ -417,55 +383,6 @@
         nmap <leader>ap <Plug>(ale_previous_wrap)
 
     " }}
-
-    " ncm2 {{
-
-        " enable ncm2 for all buffers
-        autocmd BufEnter * call ncm2#enable_for_buffer()
-
-        set completeopt=noinsert,menuone,noselect
-        " suppress the annoying 'match x of y', 'The only match'
-        " and 'Pattern not found' messages
-        set shortmess+=c
-
-        " CTRL-C doesn't trigger the InsertLeave autocmd . map to <ESC> instead.
-        inoremap <C-c> <ESC>
-
-        " Popup menu settings
-        let g:ncm2#auto_popup = 0
-        let g:ncm2#popup_limit = 10
-        let g:ncm#total_popup_limit = 10
-        let g:ncm2#manual_complete_length = [[1,1]]
-
-        " Use CTRL-Space to trigger completion
-        inoremap <C-Space> <C-r>=ncm2#manual_trigger()<CR>
-
-        " Use <TAB> to select the popup menu:
-        inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
-        inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-
-        inoremap <expr> <C-j> pumvisible() ? "\<C-n>" : "\<C-j>"
-        inoremap <expr> <C-k> pumvisible() ? "\<C-p>" : "\<C-k>"
-
-    " }}
-
-    " language server registration {{
-
-        let g:LanguageClient_serverCommands = {
-            \ 'python': ['pyls'],
-            \ }
-
-    " }}
-
-    " ultisnips {{
-
-        inoremap <silent> <expr> <CR> ncm2_ultisnips#expand_or("\<CR>", 'n')
-        let g:UltiSnipsExpandTrigger        = "<Plug>(ultisnips_expand)"
-        let g:UltiSnipsJumpForwardTrigger   = "<C-j>"
-        let g:UltiSnipsJumpBackwardTrigger  = "<C-k>"
-        let g:UltiSnipsRemoveSelectModeMappings = 0
-
-    "" }}
 
     " fzf {{
 

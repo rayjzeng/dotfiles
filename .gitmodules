@@ -5,17 +5,17 @@
 	path = dependencies/fzf.vim
 	url = git@github.com:rayjzeng/fzf.vim.git
 [submodule "zsh2/zmodules/zsh-clean"]
-	path = zsh/zmodules/zsh-clean
+	path = zsh/.zmodules/zsh-clean
 	url = git@github.com:BrandonRoehl/zsh-clean.git
 [submodule "zsh2/zmodules/zsh-completions"]
-	path = zsh/zmodules/zsh-completions
+	path = zsh/.zmodules/zsh-completions
 	url = git@github.com:zsh-users/zsh-completions.git
 [submodule "zsh2/zmodules/zsh-syntax-highlighting"]
-	path = zsh/zmodules/zsh-syntax-highlighting
+	path = zsh/.zmodules/zsh-syntax-highlighting
 	url = git@github.com:zsh-users/zsh-syntax-highlighting.git
 [submodule "zsh2/zmodules/zsh-history-substring-search"]
-	path = zsh/zmodules/zsh-history-substring-search
+	path = zsh/.zmodules/zsh-history-substring-search
 	url = git@github.com:zsh-users/zsh-history-substring-search.git
 [submodule "dependencies/z.lua"]
-	path = zsh/zmodules/z.lua
+	path = zsh/.zmodules/z.lua
 	url = git@github.com:skywind3000/z.lua.git

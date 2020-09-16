@@ -10,8 +10,9 @@
 [[ -f "${ZDOTDIR:-$HOME}/.zshenv_local.zsh" ]] && source "${ZDOTDIR:-$HOME}/.zshenv_local.zsh"
 
 # set default environments if needed
-[[ -v ZDOTDIR ]] || ZDOTDIR=$HOME
 [[ -v DOTDIR ]] || DOTDIR=$HOME/dotfiles
+[[ -v ZDOTDIR ]] || ZDOTDIR=$HOME
+[[ -v ZMODULES ]] || ZMODULES=$ZDOTDIR/.zmodules
 
 # Add Homebrew to path if configured
 if (( ${+BREWDIR} )); then
@@ -219,6 +220,10 @@ elif whence vim &>/dev/null; then
   export VISUAL='vim'
 fi
 alias e="$EDITOR"
+
+# common utilities
+alias ls="ls -G"
+alias ll="ls -GlA"
 
 # python venv
 function activate() {
