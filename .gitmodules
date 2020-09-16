@@ -23,5 +23,5 @@
 	path = zsh2/zmodules/zsh-history-substring-search
 	url = git@github.com:zsh-users/zsh-history-substring-search.git
 [submodule "dependencies/z.lua"]
-	path = dependencies/z.lua
+	path = zsh2/zmodules/z.lua
 	url = git@github.com:skywind3000/z.lua.git
