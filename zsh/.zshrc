@@ -7,15 +7,15 @@
 # env and basic options {{{
 
 # set default environments if needed
-[[ -v DOTDIR ]] || DOTDIR=$HOME/dotfiles
-[[ -v ZDOTDIR ]] || ZDOTDIR=$HOME
-[[ -v ZMODULES ]] || ZMODULES=$ZDOTDIR/.zmodules
+(( ${+DOTDIR} ))    || DOTDIR=$HOME/dotfiles
+(( ${+ZDOTDIR} ))   || ZDOTDIR=$HOME
+(( ${+ZMODULES} ))  || ZMODULES=$ZDOTDIR/.zmodules
 
 # source pre init
 [[ -f "$ZDOTDIR/.zshrc.before.zsh" ]] && source "$ZDOTDIR/.zshrc.before.zsh"
 
 # Add Homebrew to path if configured
-if [[ -v BREWDIR ]]; then
+if (( ${+BREWDIR} )); then
   typeset -U path
   path=(
     "$BREWDIR/bin"
