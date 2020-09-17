@@ -6,16 +6,13 @@
 
 # env and basic options {{{
 
-# Source local configuration if available
-[[ -f "${ZDOTDIR:-$HOME}/.zshenv_local.zsh" ]] && source "${ZDOTDIR:-$HOME}/.zshenv_local.zsh"
-
 # set default environments if needed
 [[ -v DOTDIR ]] || DOTDIR=$HOME/dotfiles
 [[ -v ZDOTDIR ]] || ZDOTDIR=$HOME
 [[ -v ZMODULES ]] || ZMODULES=$ZDOTDIR/.zmodules
 
 # Add Homebrew to path if configured
-if (( ${+BREWDIR} )); then
+if [[ -v BREWDIR ]]; then
   typeset -U path
   path=(
     "$BREWDIR/bin"
@@ -171,10 +168,11 @@ zstyle ':completion::complete:*' cache-path "$ZDOTDIR/.zcompcache"
 [[ -d "$ZMODULES/zsh-completions" ]] && fpath=("$ZMODULES/zsh-completions" $fpath)
 
 # Regenerate cache every day or so
-# Explanation of glob:
+# Explanation of glob in _comp_files:
 # - 'N' makes glob evaluate to nothing when it doesn't match
 # - '.' matches plain files
 # - 'mh-23' matches files/directories that were modified within the last 23 hrs
+# $# evaluates to the length of the parameter
 autoload -Uz compinit
 _comp_files=(${ZDORDIR:-$HOME}/.zcompdump(N.mh-23))
 if (( $#_comp_files )); then
@@ -236,5 +234,8 @@ function activate() {
 
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
+
+# Source local configuration if available
+[[ -f "$ZDOTDIR/.zshrc_local.zsh" ]] && source "$ZDOTDIR/.zshrc_local.zsh"
 
 # }}}

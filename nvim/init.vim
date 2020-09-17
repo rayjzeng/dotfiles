@@ -328,12 +328,6 @@
 
 " plugin-config {{
 
-" signify {{
-
-    let g:signfiy_vcs_list = [ 'git', 'hg' ]
-
-" }}
-
     " lightline {{
 
         let g:lightline = {
