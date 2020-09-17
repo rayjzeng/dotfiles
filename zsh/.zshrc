@@ -11,6 +11,9 @@
 [[ -v ZDOTDIR ]] || ZDOTDIR=$HOME
 [[ -v ZMODULES ]] || ZMODULES=$ZDOTDIR/.zmodules
 
+# source pre init
+[[ -f "$ZDOTDIR/.zshrc.before.zsh" ]] && source "$ZDOTDIR/.zshrc.before.zsh"
+
 # Add Homebrew to path if configured
 if [[ -v BREWDIR ]]; then
   typeset -U path
@@ -235,7 +238,7 @@ function activate() {
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
 
-# Source local configuration if available
-[[ -f "$ZDOTDIR/.zshrc_local.zsh" ]] && source "$ZDOTDIR/.zshrc_local.zsh"
+# source post init
+[[ -f "$ZDOTDIR/.zshrc.after.zsh" ]] && source "$ZDOTDIR/.zshrc.after.zsh"
 
 # }}}

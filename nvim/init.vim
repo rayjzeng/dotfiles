@@ -1,33 +1,19 @@
 " vim: set sw=4 ts=4 sts=4 et fmr={{,}} fdm=marker:
 " Vim config for Ray Zeng.
 
+" clear autocmds when hot reloading
+autocmd!
+
+" pre init
+if filereadable(expand('$HOME/.vimrc.before.vim'))
+    exe 'source ~/.vimrc.before.vim'
+endif
+
 " init {{
 
+    set nocompatible
+
     let s:nvim = has('nvim')
-
-    if !s:nvim
-        set nocompatible
-    endif
-
-    " clear autocmds when hot reloading
-    autocmd!
-
-    " set up python environments
-    if len(expand($NVIM_PYTHON3)) > 0
-        let g:python3_host_prog =expand($NVIM_PYTHON3)
-    endif
-
-    if len(expand($NVIM_PYTHON2)) > 0
-        let g:python_host_prog=expand($NVIM_PYTHON2)
-    endif
-
-    " check python version
-    if has('python3')
-        py3 import vim; from sys import version_info as v;
-                    \ vim.command('let python3_version=%d' % (v[0]*100 + v[1]))
-    else
-        let python3_version=0
-    endif
 
     " set up shell
     if executable('zsh')
@@ -89,7 +75,7 @@
 " general-config {{
 
     filetype plugin indent on
-    syntax on
+    syntax enable
     set ttyfast
     set mouse=a
     set hidden
@@ -140,7 +126,7 @@
         autocmd!
         autocmd InsertEnter * set norelativenumber
         autocmd InsertLeave * set relativenumber
-		autocmd BufEnter * set relativenumber
+        autocmd BufEnter * set relativenumber
 
         " disable numbering in terminals
         if s:nvim
@@ -386,7 +372,7 @@
         nnoremap sf :FFiles<CR>
         nnoremap sh :FHistory<CR>
         nnoremap sm :FMarks<CR>
-        nnoremap sr :FTags<CR>
+        nnoremap st :FTags<CR>
         nnoremap s: :FHistory:<CR>
 
         " Search
@@ -402,4 +388,9 @@
     " }}
 
 " }}
+
+" post init
+if filereadable(expand('$HOME/.vimrc.after.vim'))
+    exe 'source ~/.vimrc.after.vim'
+endif
 
