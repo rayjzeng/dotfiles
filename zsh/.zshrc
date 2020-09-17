@@ -222,10 +222,6 @@ elif whence vim &>/dev/null; then
 fi
 alias e="$EDITOR"
 
-# common utilities
-alias ls="ls -G"
-alias ll="ls -GlA"
-
 # python venv
 function activate() {
   if [ $# -ne 1 ]; then
