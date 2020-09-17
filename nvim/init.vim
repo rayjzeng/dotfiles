@@ -14,6 +14,11 @@ endif
     set nocompatible
 
     let s:nvim = has('nvim')
+    if s:nvim
+        let s:plugdir = '~/.config/nvim/plugged'
+    else
+        let s:plugdir = '~/.vim/plugged'
+    endif
 
     " set up shell
     if executable('zsh')
@@ -26,7 +31,7 @@ endif
 
 " bundle {{
 
-    call plug#begin('~/.config/nvim/plugged')
+    call plug#begin(s:plugdir)
 
     " themes
     Plug 'connorholyday/vim-snazzy'
