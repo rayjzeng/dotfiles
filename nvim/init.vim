@@ -46,6 +46,9 @@ endif
     " directory navigator
     Plug 'justinmk/vim-dirvish'
 
+    " tmux navigation
+    Plug 'christoomey/vim-tmux-navigator'
+
     " Auto intent detection
     Plug 'tpope/vim-sleuth'
 
