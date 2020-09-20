@@ -60,6 +60,9 @@ endif
     Plug 'tpope/vim-commentary'
     Plug 'tpope/vim-repeat'
 
+    Plug 'roxma/vim-tmux-clipboard'
+    Plug 'tmux-plugins/vim-tmux-focus-events'
+
     " Git integration
     Plug 'tpope/vim-fugitive'
     Plug 'mhinz/vim-signify'
@@ -90,10 +93,10 @@ endif
 
     " use system clipboard by default
     if has('clipboard')
-        if has('unnamedplus')  " When possible use + register for copy-paste
-            set clipboard=unnamed,unnamedplus
-        else         " On mac and Windows, use * register for copy-paste
-            set clipboard=unnamed
+        if has('unnamedplus')  " use + register on x11 systems
+            set clipboard+=unnamed,unnamedplus
+        else
+            set clipboard+=unnamed
         endif
     endif
 
