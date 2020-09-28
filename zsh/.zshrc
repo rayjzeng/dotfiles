@@ -43,8 +43,10 @@ setopt PUSHDTOHOME
 
 # FZF
 [[ -f "$HOME/.fzf.zsh" ]] && source "$HOME/.fzf.zsh"
-export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
-export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
+if whence fd &>/dev/null; then
+  export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
+  export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
+fi
 
 # z.lua
 zlua_path="$ZMODULES/z.lua/z.lua"
@@ -59,54 +61,55 @@ if [[ -f "$zlua_path" ]]; then
 fi
 unset zlua_path
 
+# TODO: replace with zkbd based configuration
 # Use human-friendly identifiers.
-zmodload -F zsh/terminfo +b:echoti +p:terminfo
-typeset -gA key_info
-key_info=(
-  'Control'      '\C-'
-  'ControlLeft'  '\e[1;5D \e[5D \e\e[D \eOd \eOD'
-  'ControlRight' '\e[1;5C \e[5C \e\e[C \eOc \eOC'
-  'Escape'       '\e'
-  'Meta'         '\M-'
-  'Backspace'    "${terminfo[kbs]}"
-  'BackTab'      "${terminfo[kcbt]}"
-  'Left'         "${terminfo[kcub1]}"
-  'Down'         "${terminfo[kcud1]}"
-  'Right'        "${terminfo[kcuf1]}"
-  'Up'           "${terminfo[kcuu1]}"
-  'Delete'       "${terminfo[kdch1]}"
-  'End'          "${terminfo[kend]}"
-  'F1'           "${terminfo[kf1]}"
-  'F2'           "${terminfo[kf2]}"
-  'F3'           "${terminfo[kf3]}"
-  'F4'           "${terminfo[kf4]}"
-  'F5'           "${terminfo[kf5]}"
-  'F6'           "${terminfo[kf6]}"
-  'F7'           "${terminfo[kf7]}"
-  'F8'           "${terminfo[kf8]}"
-  'F9'           "${terminfo[kf9]}"
-  'F10'          "${terminfo[kf10]}"
-  'F11'          "${terminfo[kf11]}"
-  'F12'          "${terminfo[kf12]}"
-  'Home'         "${terminfo[khome]}"
-  'Insert'       "${terminfo[kich1]}"
-  'PageDown'     "${terminfo[knp]}"
-  'PageUp'       "${terminfo[kpp]}"
-)
+# zmodload -F zsh/terminfo +b:echoti +p:terminfo
+# typeset -gA key_info
+# key_info=(
+#   'Control'      '\C-'
+#   'ControlLeft'  '\e[1;5D \e[5D \e\e[D \eOd \eOD'
+#   'ControlRight' '\e[1;5C \e[5C \e\e[C \eOc \eOC'
+#   'Escape'       '\e'
+#   'Meta'         '\M-'
+#   'Backspace'    "${terminfo[kbs]}"
+#   'BackTab'      "${terminfo[kcbt]}"
+#   'Left'         "${terminfo[kcub1]}"
+#   'Down'         "${terminfo[kcud1]}"
+#   'Right'        "${terminfo[kcuf1]}"
+#   'Up'           "${terminfo[kcuu1]}"
+#   'Delete'       "${terminfo[kdch1]}"
+#   'End'          "${terminfo[kend]}"
+#   'F1'           "${terminfo[kf1]}"
+#   'F2'           "${terminfo[kf2]}"
+#   'F3'           "${terminfo[kf3]}"
+#   'F4'           "${terminfo[kf4]}"
+#   'F5'           "${terminfo[kf5]}"
+#   'F6'           "${terminfo[kf6]}"
+#   'F7'           "${terminfo[kf7]}"
+#   'F8'           "${terminfo[kf8]}"
+#   'F9'           "${terminfo[kf9]}"
+#   'F10'          "${terminfo[kf10]}"
+#   'F11'          "${terminfo[kf11]}"
+#   'F12'          "${terminfo[kf12]}"
+#   'Home'         "${terminfo[khome]}"
+#   'Insert'       "${terminfo[kich1]}"
+#   'PageDown'     "${terminfo[knp]}"
+#   'PageUp'       "${terminfo[kpp]}"
+# )
 
-# use emacs bindings
-bindkey -e
+# # use emacs bindings
+# bindkey -e
 
-# Bind <Shift-Tab> to go to the previous menu item.
-if [[ -n ${key_info[BackTab]} ]] bindkey ${key_info[BackTab]} reverse-menu-complete
+# # Bind <Shift-Tab> to go to the previous menu item.
+# if [[ -n ${key_info[BackTab]} ]] bindkey ${key_info[BackTab]} reverse-menu-complete
 
-# fix some keys
-if [[ -n ${key_info[Home]} ]] bindkey ${key_info[Home]} beginning-of-line
-if [[ -n ${key_info[End]} ]] bindkey ${key_info[End]} end-of-line
-if [[ -n ${key_info[PageUp]} ]] bindkey ${key_info[PageUp]} up-line-or-history
-if [[ -n ${key_info[PageDown]} ]] bindkey ${key_info[PageDown]} down-line-or-history
-if [[ -n ${key_info[Insert]} ]] bindkey ${key_info[Insert]} overwrite-mode
-if [[ -n ${key_info[Delete]} ]] bindkey ${key_info[Delete]} delete-char
+# # fix some keys
+# if [[ -n ${key_info[Home]} ]] bindkey ${key_info[Home]} beginning-of-line
+# if [[ -n ${key_info[End]} ]] bindkey ${key_info[End]} end-of-line
+# if [[ -n ${key_info[PageUp]} ]] bindkey ${key_info[PageUp]} up-line-or-history
+# if [[ -n ${key_info[PageDown]} ]] bindkey ${key_info[PageDown]} down-line-or-history
+# if [[ -n ${key_info[Insert]} ]] bindkey ${key_info[Insert]} overwrite-mode
+# if [[ -n ${key_info[Delete]} ]] bindkey ${key_info[Delete]} delete-char
 
 # }}}
 

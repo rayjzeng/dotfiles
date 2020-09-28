@@ -60,7 +60,7 @@ endif
     Plug 'tpope/vim-commentary'
     Plug 'tpope/vim-repeat'
 
-    Plug 'roxma/vim-tmux-clipboard'
+    Plug 'rayjzeng/vim-tmux-clipboard'
     Plug 'tmux-plugins/vim-tmux-focus-events'
 
     " Git integration
@@ -119,9 +119,9 @@ endif
     set splitbelow                  " open splits to bottom
 
     " 24 bit color set when available
-    " if $TERM =~# '.*256.*\|kitty' && $COLORTERM ==# 'truecolor'
-    "     set termguicolors
-    " endif
+    if $TERM =~# '.*256color.*' || $COLORTERM ==# 'truecolor'
+        set termguicolors
+    endif
 
     " theme
     set background=dark
@@ -129,6 +129,7 @@ endif
     let g:gruvbox_contrast_light="medium"
     let g:gruvbox_sign_column="bg0"
     let g:gruvbox_invert_selection=0
+    let g:gruvbox_italic=1
     colorscheme gruvbox
 
     " Line numbering
