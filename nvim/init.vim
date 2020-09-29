@@ -118,8 +118,23 @@ endif
     set splitright                  " open splits to right
     set splitbelow                  " open splits to bottom
 
+    " Cursor settings for Vim
+    "  1 -> blinking block
+    "  2 -> solid block
+    "  3 -> blinking underscore
+    "  4 -> solid underscore
+    "  5 -> blinking vertical bar
+    "  6 -> solid vertical bar
+
+    let &t_SI.="\<esc>[5 q" "SI = INSERT mode
+    let &t_SR.="\<esc>[4 q" "SR = REPLACE mode
+    let &t_EI.="\<esc>[2 q" "EI = NORMAL mode (ELSE)
+
     " 24 bit color set when available
     if $TERM =~# '.*256color.*' || $COLORTERM ==# 'truecolor'
+        " set Vim-specific sequences for RGB colors
+        let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
+        let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
         set termguicolors
     endif
 
@@ -129,7 +144,6 @@ endif
     let g:gruvbox_contrast_light="medium"
     let g:gruvbox_sign_column="bg0"
     let g:gruvbox_invert_selection=0
-    let g:gruvbox_italic=1
     colorscheme gruvbox
 
     " Line numbering
