@@ -4,8 +4,6 @@
 # Author: rayjzeng
 #
 
-# env and basic options {{{
-
 # set default environments if needed
 (( ${+DOTDIR} ))    || DOTDIR=$HOME/dotfiles
 (( ${+ZDOTDIR} ))   || ZDOTDIR=$HOME
@@ -13,6 +11,8 @@
 
 # source pre init
 [[ -f "$ZDOTDIR/.zshrc.before.zsh" ]] && source "$ZDOTDIR/.zshrc.before.zsh"
+
+# env {{{
 
 # Add Homebrew to path if configured
 if (( ${+BREWDIR} )); then
@@ -25,12 +25,18 @@ if (( ${+BREWDIR} )); then
   export PATH
 fi
 
+setopt LONG_LIST_JOBS     # List jobs in the long format by default.
+setopt NOTIFY             # Report status of background jobs immediately.
+unsetopt BG_NICE          # Don't run all background jobs at a lower priority.
+
 # }}}
 
 # editor {{{
 
 unsetopt BEEP
 unsetopt CORRECT
+
+WORDCHARS='*?_-.[]~&;!#$%^(){}<>'
 
 # directory stack
 DIRSTACKSIZE=10
@@ -41,75 +47,29 @@ setopt PUSHDMINUS
 setopt PUSHDSILENT
 setopt PUSHDTOHOME
 
-# FZF
-[[ -f "$HOME/.fzf.zsh" ]] && source "$HOME/.fzf.zsh"
-if whence fd &>/dev/null; then
-  export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
-  export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
+# keybinding configuration
+bindkey -e
+
+autoload -Uz zkbd
+if [[ -f "$HOME/.zkbd/$TERM-${DISPLAY:-$VENDOR-$OSTYPE}" ]]; then
+  source "$HOME/.zkbd/$TERM-${DISPLAY:-$VENDOR-$OSTYPE}"
+else
+  echo "WARNING: Keybindings may not be set correctly!"
+  echo "Execute \`zkbd\` to create bindings."
 fi
 
-# z.lua
-zlua_path="$ZMODULES/z.lua/z.lua"
-if [[ -f "$zlua_path" ]]; then
-  eval "$(lua ${zlua_path} --init zsh)"
-
-  export _ZL_MATCH_MODE=1  # use enhanced matching so z acts like cd for unvisited directories
-
-  alias zb="z -b"
-  alias zf="z -I"
-  alias zbf="z -b -I"
-fi
-unset zlua_path
-
-# TODO: replace with zkbd based configuration
-# Use human-friendly identifiers.
-# zmodload -F zsh/terminfo +b:echoti +p:terminfo
-# typeset -gA key_info
-# key_info=(
-#   'Control'      '\C-'
-#   'ControlLeft'  '\e[1;5D \e[5D \e\e[D \eOd \eOD'
-#   'ControlRight' '\e[1;5C \e[5C \e\e[C \eOc \eOC'
-#   'Escape'       '\e'
-#   'Meta'         '\M-'
-#   'Backspace'    "${terminfo[kbs]}"
-#   'BackTab'      "${terminfo[kcbt]}"
-#   'Left'         "${terminfo[kcub1]}"
-#   'Down'         "${terminfo[kcud1]}"
-#   'Right'        "${terminfo[kcuf1]}"
-#   'Up'           "${terminfo[kcuu1]}"
-#   'Delete'       "${terminfo[kdch1]}"
-#   'End'          "${terminfo[kend]}"
-#   'F1'           "${terminfo[kf1]}"
-#   'F2'           "${terminfo[kf2]}"
-#   'F3'           "${terminfo[kf3]}"
-#   'F4'           "${terminfo[kf4]}"
-#   'F5'           "${terminfo[kf5]}"
-#   'F6'           "${terminfo[kf6]}"
-#   'F7'           "${terminfo[kf7]}"
-#   'F8'           "${terminfo[kf8]}"
-#   'F9'           "${terminfo[kf9]}"
-#   'F10'          "${terminfo[kf10]}"
-#   'F11'          "${terminfo[kf11]}"
-#   'F12'          "${terminfo[kf12]}"
-#   'Home'         "${terminfo[khome]}"
-#   'Insert'       "${terminfo[kich1]}"
-#   'PageDown'     "${terminfo[knp]}"
-#   'PageUp'       "${terminfo[kpp]}"
-# )
-
-# # use emacs bindings
-# bindkey -e
+zmodload zsh/terminfo
 
 # # Bind <Shift-Tab> to go to the previous menu item.
-# if [[ -n ${key_info[BackTab]} ]] bindkey ${key_info[BackTab]} reverse-menu-complete
+if [[ -n ${terminfo[kcbt]} ]] bindkey ${terminfo[kcbt]} reverse-menu-complete
 
 # # fix some keys
-# if [[ -n ${key_info[Home]} ]] bindkey ${key_info[Home]} beginning-of-line
-# if [[ -n ${key_info[End]} ]] bindkey ${key_info[End]} end-of-line
-# if [[ -n ${key_info[PageUp]} ]] bindkey ${key_info[PageUp]} up-line-or-history
-# if [[ -n ${key_info[PageDown]} ]] bindkey ${key_info[PageDown]} down-line-or-history
-# if [[ -n ${key_info[Insert]} ]] bindkey ${key_info[Insert]} overwrite-mode
-# if [[ -n ${key_info[Delete]} ]] bindkey ${key_info[Delete]} delete-char
+if [[ -n ${key[Home]} ]] bindkey ${key[Home]} beginning-of-line
+if [[ -n ${key[End]} ]] bindkey ${key[End]} end-of-line
+if [[ -n ${key[PageUp]} ]] bindkey ${key[PageUp]} up-line-or-history
+if [[ -n ${key[PageDown]} ]] bindkey ${key[PageDown]} down-line-or-history
+if [[ -n ${key[Insert]} ]] bindkey ${key[Insert]} overwrite-mode
+if [[ -n ${key[Delete]} ]] bindkey ${key[Delete]} delete-char
 
 # }}}
 
@@ -136,16 +96,16 @@ setopt HIST_VERIFY
 setopt HIST_BEEP
 
 HISTFILE="$ZDOTDIR/.zsh_history"  # History file location
-HISTSIZE=10000                             # Internal history size
-SAVEHIST=10000                             # History file size
+HISTSIZE=50000                             # Internal history size
+SAVEHIST=50000                             # History file size
 
 # use history substring search
 z_hist_search=$ZMODULES/zsh-history-substring-search/zsh-history-substring-search.zsh
 if [[ -f "$z_hist_search" ]]; then
   source $z_hist_search
 
-  bindkey '^[[A' history-substring-search-up
-  bindkey '^[[B' history-substring-search-down
+  if [[ -n ${key[Up]} ]] bindkey ${key[Up]} history-substring-search-up
+  if [[ -n ${key[Down]} ]] bindkey ${key[Down]} history-substring-search-down
   bindkey -M emacs '^P' history-substring-search-up
   bindkey -M emacs '^N' history-substring-search-down
 
@@ -172,6 +132,21 @@ zstyle ':completion::complete:*' cache-path "$ZDOTDIR/.zcompcache"
 
 # Load completions from zsh-completions
 [[ -d "$ZMODULES/zsh-completions" ]] && fpath=("$ZMODULES/zsh-completions" $fpath)
+
+# options
+# Group matches and describe.
+zstyle ':completion:*:*:*:*:*' menu select
+zstyle ':completion:*:matches' group yes
+zstyle ':completion:*:options' description yes
+zstyle ':completion:*:options' auto-description '%d'
+zstyle ':completion:*:corrections' format '%F{green}-- %d (errors: %e) --%f'
+zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
+zstyle ':completion:*:messages' format '%F{purple}-- %d --%f'
+zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
+zstyle ':completion:*' format '%F{yellow}-- %d --%f'
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*' verbose yes
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' '+r:|?=**'
 
 # Regenerate cache every day or so
 # Explanation of glob in _comp_files:
@@ -201,7 +176,34 @@ fi
 
 # }}}
 
-# additional aliases {{{
+# additional aliases and utilities {{{
+
+# Default editors
+if whence vim &>/dev/null; then
+  export EDITOR='vim'
+  export VISUAL='vim'
+fi
+alias e="$EDITOR"
+
+# FZF
+[[ -f "$HOME/.fzf.zsh" ]] && source "$HOME/.fzf.zsh"
+if whence fd &>/dev/null; then
+  export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
+  export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
+fi
+
+# z.lua
+zlua_path="$ZMODULES/z.lua/z.lua"
+if [[ -f "$zlua_path" ]]; then
+  eval "$(lua ${zlua_path} --init zsh)"
+
+  export _ZL_MATCH_MODE=1  # use enhanced matching so z acts like cd for unvisited directories
+
+  alias zb="z -b"
+  alias zf="z -I"
+  alias zbf="z -b -I"
+fi
+unset zlua_path
 
 # Expand aliases with <C-Space>
 function expand_alias() {
@@ -215,20 +217,50 @@ function expand_alias() {
 zle -N expand_alias
 bindkey "^ " expand_alias
 
-# Default editors
-if whence nvim &>/dev/null; then
-  export EDITOR='nvim'
-  export VISUAL='nvim'
-elif whence vim &>/dev/null; then
-  export EDITOR='vim'
-  export VISUAL='vim'
+# ls colors
+alias ls='ls --color=auto'
+
+if [[ "$VENDOR-$OSTYPE" = apple-darwin* ]]; then  # override on mac
+  if whence gls &>/dev/null; then
+    alias ls='gls --color=auto'
+  else
+    alias ls='ls -G'
+  fi
+else
 fi
-alias e="$EDITOR"
+
+alias l='ls -1A'
+alias ll='ls -lh'
+alias la='ll -lA'
+
+alias mkdir='mkdir -p'
+
+# grep colors
+export GREP_COLOR='1;97;45'                                             # BSD.
+export GREP_COLORS='mt=$GREP_COLOR:sl=:cx=:fn=35:ln=32:bn=32:se=36'     # GNU.
+alias grep='grep --color=auto'
+
+# less options and styling defaults
+export LESS='-F -i -M -R -S -z-2 -q'
+export LESS_TERMCAP_mb=$(tput bold; tput setaf 2)                 # green for blink
+export LESS_TERMCAP_md=$(tput bold; tput setaf 5)                 # magenta for bold
+export LESS_TERMCAP_me=$(tput sgr0)                               # end bold
+export LESS_TERMCAP_so=$(tput bold; tput setaf 0; tput setab 15)  # black on white for standout
+export LESS_TERMCAP_se=$(tput rmso; tput sgr0)                    # end standout
+export LESS_TERMCAP_us=$(tput smul; tput bold; tput setaf 6)      # cyan for underline
+export LESS_TERMCAP_ue=$(tput rmul; tput sgr0)                    # end underline
+export LESS_TERMCAP_mr=$(tput rev)                                # reverse video mode
+export LESS_TERMCAP_mh=$(tput dim)                                # dim mode
+export LESS_TERMCAP_ZN=$(tput ssubm)                              # subscript
+export LESS_TERMCAP_ZV=$(tput rsubm)                              # exit subscript
+export LESS_TERMCAP_ZO=$(tput ssupm)                              # superscript
+export LESS_TERMCAP_ZW=$(tput rsupm)                              # exit superscript
+export GROFF_NO_SGR=1                                             # For Konsole and Gnome-terminal
 
 # python venv
 function activate() {
   if [ $# -ne 1 ]; then
-    echo "Usage: activate [virtual env directory]"
+    echo 'Usage: activate [virtual env directory]'
   else
     source "$1/bin/activate"
   fi
@@ -241,7 +273,7 @@ alias ett="et -c 'tmux -CC new-session'"            # start new tmux session
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
 
+# }}}
+
 # source post init
 [[ -f "$ZDOTDIR/.zshrc.after.zsh" ]] && source "$ZDOTDIR/.zshrc.after.zsh"
-
-# }}}
