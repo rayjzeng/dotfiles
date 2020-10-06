@@ -33,24 +33,19 @@ endif
 
     call plug#begin(s:plugdir)
 
-    " themes
-    Plug 'connorholyday/vim-snazzy'
-    Plug 'morhetz/gruvbox'
+    " tmux integration
+    Plug 'christoomey/vim-tmux-navigator'
+    Plug 'rayjzeng/vim-tmux-clipboard'
+    Plug 'tmux-plugins/vim-tmux-focus-events'
 
-    " Distraction free mode
-    Plug 'junegunn/goyo.vim'
+    " themes
+    Plug 'gruvbox-community/gruvbox'
 
     " Statusline
     Plug 'itchyny/lightline.vim'
 
     " directory navigator
     Plug 'justinmk/vim-dirvish'
-
-    " tmux navigation
-    Plug 'christoomey/vim-tmux-navigator'
-
-    " Auto intent detection
-    Plug 'tpope/vim-sleuth'
 
     " Movement
     Plug 'unblevable/quick-scope'
@@ -59,9 +54,6 @@ endif
     Plug 'tpope/vim-surround'
     Plug 'tpope/vim-commentary'
     Plug 'tpope/vim-repeat'
-
-    Plug 'rayjzeng/vim-tmux-clipboard'
-    Plug 'tmux-plugins/vim-tmux-focus-events'
 
     " Git integration
     Plug 'tpope/vim-fugitive'
@@ -78,6 +70,9 @@ endif
 
     " syntax
     Plug 'sheerun/vim-polyglot'
+
+    " Auto intent detection
+    Plug 'tpope/vim-sleuth'
 
     call plug#end()
 
@@ -130,6 +125,9 @@ endif
     let &t_SR.="\<esc>[4 q" "SR = REPLACE mode
     let &t_EI.="\<esc>[2 q" "EI = NORMAL mode (ELSE)
 
+    set ttimeout
+    set ttimeoutlen=10  " reduce timeout for keycodes
+
     " 24 bit color set when available
     if $TERM =~# '.*256color.*' || $COLORTERM ==# 'truecolor'
         " set Vim-specific sequences for RGB colors
@@ -147,16 +145,17 @@ endif
     colorscheme gruvbox
 
     " Line numbering
-    set number
+    set relativenumber
     augroup numbering
-        autocmd!
-        autocmd InsertEnter * set norelativenumber
-        autocmd InsertLeave * set relativenumber
-        autocmd BufEnter * set relativenumber
+        autocmd! numbering
+        autocmd InsertEnter * setlocal norelativenumber number
+        autocmd InsertLeave * setlocal relativenumber nonumber
 
         " disable numbering in terminals
         if s:nvim
             autocmd TermOpen * setlocal nonumber norelativenumber
+        else
+            autocmd TerminalOpen * setlocal nonumber norelativenumber nolist
         endif
     augroup END
 
@@ -357,7 +356,7 @@ endif
                     \     ],
                     \   },
                     \ 'component_function': {
-                    \     'gitbranch': 'fugitive#head',
+                    \     'gitbranch': 'FugitiveHead',
                     \   },
                     \ 'component_expand': {
                     \     'linter_checking': 'lightline#ale#checking',

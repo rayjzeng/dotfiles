@@ -131,7 +131,16 @@ zstyle ':completion::complete:*' use-cache on
 zstyle ':completion::complete:*' cache-path "$ZDOTDIR/.zcompcache"
 
 # Load completions from zsh-completions
-[[ -d "$ZMODULES/zsh-completions" ]] && fpath=("$ZMODULES/zsh-completions" $fpath)
+_module="$ZMODULES/zsh-completions" 
+[[ -d $_module ]] && fpath=($_module $fpath)
+
+# Load more completions
+_module="$ZMODULES/third-party"
+if [[ -d $_module ]]; then
+  zstyle ':completion:*:*:git:*' script "$_module/git-completion.bash"
+  fpath=($_module $fpath)
+fi
+unset _module
 
 # options
 # Group matches and describe.
@@ -267,8 +276,8 @@ function activate() {
 }
 
 # Eternal Terminal and tmux
-alias eta="et -c 'tmux -CC new-session -As auto'"   # join auto tmux session
-alias ett="et -c 'tmux -CC new-session'"            # start new tmux session
+alias eta="et -c 'tmux new-session -As auto'"   # join auto tmux session
+alias ett="et -c 'tmux new-session'"            # start new tmux session
 
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
