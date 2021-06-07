@@ -122,7 +122,6 @@ setopt ALWAYS_TO_END       # Move cursor to the end of a completed word.
 setopt AUTO_MENU           # Show completion menu on a successive tab press.
 setopt AUTO_LIST           # Automatically list choices on ambiguous completion.
 setopt AUTO_PARAM_SLASH    # If completed parameter is a directory, add a trailing slash.
-setopt EXTENDED_GLOB       # Needed for file modification glob modifiers with compinit
 unsetopt MENU_COMPLETE     # Do not autoselect the first completion entry.
 unsetopt FLOW_CONTROL      # Disable start/stop characters in shell editor.
 
@@ -157,6 +156,8 @@ zstyle ':completion:*' group-name ''
 zstyle ':completion:*' verbose yes
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' '+r:|?=**'
 
+setopt EXTENDED_GLOB       # Needed for file modification glob modifiers with compinit
+
 # Regenerate cache every day or so
 # Explanation of glob in _comp_files:
 # - 'N' makes glob evaluate to nothing when it doesn't match
@@ -171,6 +172,8 @@ else
   compinit -d "$ZDOTDIR/.zcompdump";
 fi
 unset _comp_files
+
+unsetopt EXTENDED_GLOB
 
 # }}}
 
