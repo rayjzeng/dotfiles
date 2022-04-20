@@ -4,3 +4,5 @@ tmux/.tmux/plugins/*
 !tmux/.tmux/plugins/tpm/
 
 **/*.swp
+
+dependencies/Brewfile.lock.json
