@@ -145,11 +145,12 @@ endif
     colorscheme gruvbox
 
     " Line numbering
+    set number
     set relativenumber
     augroup numbering
         autocmd! numbering
-        autocmd InsertEnter * setlocal norelativenumber number
-        autocmd InsertLeave * setlocal relativenumber nonumber
+        autocmd InsertEnter * setlocal norelativenumber
+        autocmd InsertLeave * setlocal relativenumber
 
         " disable numbering in terminals
         if s:nvim
@@ -321,9 +322,9 @@ endif
     " config editing {{
 
         nnoremap <leader><leader>s
-                    \ :source ~/.config/nvim/init.vim<CR>
+                    \ :source ~/.vimrc<CR>
         nnoremap <leader><leader>e
-                    \ :e ~/.config/nvim/init.vim<CR>
+                    \ :e ~/.vimrc<CR>
 
         " config filetypes
         augroup config_ft
