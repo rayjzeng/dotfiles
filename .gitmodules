@@ -1,12 +1,21 @@
 [submodule "tmux/.tmux/plugins/tpm"]
 	path = tmux/.tmux/plugins/tpm
 	url = git@github.com:tmux-plugins/tpm.git
-[submodule "dependencies/up"]
-	path = dependencies/up
-	url = git@github.com:shannonmoeller/up.git
-[submodule "zsh/.zim"]
-	path = zsh/.zim
-	url = git@github.com:zimfw/zimfw.git
 [submodule "dependencies/fzf.vim"]
-	path = dependencies/fzf.vim
+	path = nvim/fzf.vim
 	url = git@github.com:rayjzeng/fzf.vim.git
+[submodule "zsh2/zmodules/zsh-completions"]
+	path = zsh/.zmodules/zsh-completions
+	url = git@github.com:zsh-users/zsh-completions.git
+[submodule "zsh2/zmodules/zsh-syntax-highlighting"]
+	path = zsh/.zmodules/zsh-syntax-highlighting
+	url = git@github.com:zsh-users/zsh-syntax-highlighting.git
+[submodule "zsh2/zmodules/zsh-history-substring-search"]
+	path = zsh/.zmodules/zsh-history-substring-search
+	url = git@github.com:zsh-users/zsh-history-substring-search.git
+[submodule "dependencies/z.lua"]
+	path = zsh/.zmodules/z.lua
+	url = git@github.com:skywind3000/z.lua.git
+[submodule "zsh/.zmodules/zsh-clean"]
+	path = zsh/.zmodules/zsh-clean
+	url = git@github.com:rayjzeng/zsh-clean.git

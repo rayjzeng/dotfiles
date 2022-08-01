@@ -1,28 +1,31 @@
 # Install Notes
 ---------------
-Run `git clone --recurse-submodules git@github.com:rayjzeng/dotfiles.git $HOME/dotfiles`.
+Get Git and set up ssh keys/configure ssh-agent and then run:
+```sh
+git clone --recurse-submodules git@github.com:rayjzeng/dotfiles.git $HOME/dotfiles
+```
 
-Run `git submodule init` and `git submodule update --recursive` 
-to set up submodules if needed (particularly check `zsh/.zim`).
+Don't forget to run `git submodule init` and `git submodule update --recursive`.
 
 ## Common Environment setup
 ---------------------------
 
 ### Install dependencies
 - macOS:
-    * Get [brew][1]
+    * Get [brew](https://brew.sh/)
     * use `/dependecies/Brewfile` with `brew bundle install`
-- arch:
-    * Install yay `pacman -S yay`
-- Some needed packages (refer to Brewfile)
-    * rg
+- Some needed packages (refer to Brewfile on macOS)
     * fd
-    * stow
+    * fzf
     * git
-    * python(2/3)
+    * node
+    * python
+    * rg
+    * stow
+    * tmux
+    * vim
 - to have safe trash install (and update .local.sh with aliases):
     * brew name: trash
-    * arch pkg: trash-cli
 
 #### Quick reminder on using stow
 - See `man stow`
@@ -30,63 +33,49 @@ to set up submodules if needed (particularly check `zsh/.zim`).
 - Note: target directory defaults to parent of stow directory and
     stow directory defaults to current directory
 
-### Get zsh
-zsh configuration currently makes use of [zim][2].
+### zsh
+- macOS: `brew install zsh` or use built in zsh
+- Configuration: `stow -t $HOME -d $HOME/dotfiles zsh`
+- You will need to run `zkbd` for each terminal emulator (including for tmux)
 
-- macOS: `brew install zsh zsh-completions`
-- arch: `yay -S zsh zsh-completion`
-- set zsh default: `chsh -s $(which zsh)`
-    * May need to add path to zsh to /etc/shells
-- stow `stow zsh`
+#### Manual dependencies in zsh/.zmodules/third-party
+-----------------------------------------------------
+These need to be updated manually but should be relatively stable:
+- [Curl zsh completions](https://github.com/curl/curl/blob/master/scripts/completion.pl)
 
-### Terminal emulators
-- [iTerm2][3]
-- [kitty][4]
-- Install themes (see scripts folder)
-    * One Dark
-    * Snazzy
+### Terminal
+- Point [iTerm2](https://www.iterm2.com/) settings backup to appropriate directory
 
-### Install (neo)vim
-- macOS: `brew install neovim` (consider also installing macvim)
-- arch: `yay -S neovim gvim`
-- install python dependencies: `pip[3] install pynvim`
-- for configuration: 
-    `mkdir ~/.config/nvim && stow -t ~/.config/nvim -d $DOT_DIR nvim`
-- In nvim run `:PlugInstall` and `:UpdateRemotePlugins`
-- Symlinks should make running vim interchangable with neovim
-    * Current limitations (TODO: make config fully vim compatible)
-	    + undo and history  is not set for vim
-        + deoplete and remote plugins are not available
+### vim configuration
+- For configuration: 
+    ```sh
+    mkdir -p ~/.config/nvim && stow -t $HOME/.config/nvim -d $HOME/dotfiles nvim
+    stow -t $HOME -d $HOME/dotfiles vim
+    ```
+- Run `:PlugInstall`
 
-### Get tmux (optional)
-- Install with package manager of choice
-- Stow configuration: `stow tmux`
+#### Neovim
+Currently, the philosophy in my vim configuration is to minimize external
+dependencies for better xplat compatability. This also means preferring vim
+over Neovim.
+
+### tmux
+- Install a relatively recent version with package manager of choice
+- Stow configuration: `stow -t $HOME -d $HOME/dotfiles tmux`
+- Leader is currently set to default \<C-b\>
 - Run `<leader>I` to install plugins
 
 ### Install language support
 - Python:
-    * Just use brew and/or Conda
-    * pip install pynvim jedi pylint
-    * If more complex environment management is needed consider: 
-        [pyenv setup reference][5]
+    * Just use brew for system-wide Python
+    * `pip install jedi pylint`
+    * If more complex environment management is needed consider using pyenv
 - Rust
-    * [Installation][6]
+    * [Installation](https://www.rust-lang.org/tools/install)
 	```sh
 	cargo install racer
 	rustup component add rust-src
 	```
 - OCaml
-    * [General install instructions][7]
+    * [General install instructions](https://ocaml.org/docs/install.html)
     * Potentially avoid brew for X11 support on Mac
-
-## Arch Details
----------------
-Currently i3 config is saved. More to come.
-
-[1]: https://brew.sh/
-[2]: https://github.com/zimfw/zimfw
-[3]: https://www.iterm2.com/
-[4]: https://sw.kovidgoyal.net/kitty/
-[5]: https://medium.com/@henriquebastos/the-definitive-guide-to-setup-my-python-workspace-628d68552e14
-[6]: https://www.rust-lang.org/en-US/install.html
-[7]: https://ocaml.org/docs/install.html

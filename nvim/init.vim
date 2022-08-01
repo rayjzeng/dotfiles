@@ -1,32 +1,23 @@
 " vim: set sw=4 ts=4 sts=4 et fmr={{,}} fdm=marker:
 " Vim config for Ray Zeng.
 
+" clear autocmds when hot reloading
+autocmd!
+
+" pre init
+if filereadable(expand('$HOME/.vimrc.before.vim'))
+    exe 'source ~/.vimrc.before.vim'
+endif
+
 " init {{
 
+    set nocompatible
+
     let s:nvim = has('nvim')
-
-    if !s:nvim
-        set nocompatible
-    endif
-
-    " clear autocmds when hot reloading
-    autocmd!
-
-    " set up python environments
-    if len(expand($NVIM_PYTHON3)) > 0
-        let g:python3_host_prog =expand($NVIM_PYTHON3)
-    endif
-
-    if len(expand($NVIM_PYTHON2)) > 0
-        let g:python_host_prog=expand($NVIM_PYTHON2)
-    endif
-
-    " check python version
-    if has('python3')
-        py3 import vim; from sys import version_info as v;
-                    \ vim.command('let python3_version=%d' % (v[0]*100 + v[1]))
+    if s:nvim
+        let s:plugdir = '~/.config/nvim/plugged'
     else
-        let python3_version=0
+        let s:plugdir = '~/.vim/plugged'
     endif
 
     " set up shell
@@ -40,23 +31,21 @@
 
 " bundle {{
 
-    call plug#begin('~/.config/nvim/plugged')
+    call plug#begin(s:plugdir)
+
+    " tmux integration
+    Plug 'christoomey/vim-tmux-navigator'
+    Plug 'rayjzeng/vim-tmux-clipboard'
+    Plug 'tmux-plugins/vim-tmux-focus-events'
 
     " themes
-    Plug 'connorholyday/vim-snazzy'
-    Plug 'morhetz/gruvbox'
-
-    " Distraction free mode
-    Plug 'junegunn/goyo.vim'
+    Plug 'gruvbox-community/gruvbox'
 
     " Statusline
     Plug 'itchyny/lightline.vim'
 
     " directory navigator
     Plug 'justinmk/vim-dirvish'
-
-    " Auto intent detection
-    Plug 'tpope/vim-sleuth'
 
     " Movement
     Plug 'unblevable/quick-scope'
@@ -71,70 +60,38 @@
     Plug 'mhinz/vim-signify'
 
     " fzf
-    Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
-    Plug 'rayjzeng/fzf.vim', { 'branch': 'ray' }
+    Plug 'junegunn/fzf'
+    Plug '~/.config/nvim/fzf.vim'
 
     " ale
-    Plug 'w0rp/ale'
+    let g:ale_disable_lsp = 1
+    Plug 'dense-analysis/ale'
     Plug 'maximbaz/lightline-ale'
 
+    " syntax
     Plug 'sheerun/vim-polyglot'
 
-    " ncm2
-    Plug 'ncm2/ncm2'
-    Plug 'roxma/nvim-yarp'
-    Plug 'roxma/vim-hug-neovim-rpc'
-
-    " general completion sourcees
-    Plug 'ncm2/ncm2-bufword'
-    Plug 'ncm2/ncm2-path'
-    Plug 'Shougo/neco-syntax' | Plug 'ncm2/ncm2-syntax'
-
-    " snippets
-    Plug 'SirVer/ultisnips'
-    Plug 'honza/vim-snippets'
-    Plug 'ncm2/ncm2-ultisnips'
-
-    " language server
-    Plug 'autozimu/LanguageClient-neovim', {
-        \ 'branch': 'next',
-        \ 'do': 'bash install.sh',
-        \ }
-
-    " vimscript completion
-    Plug 'Shougo/neco-vim' | Plug 'ncm2/ncm2-vim'
+    " Auto intent detection
+    Plug 'tpope/vim-sleuth'
 
     call plug#end()
-
-    " merlin and ocp-indent
-    let s:opam_share_dir = system("opam config var share")
-    let s:opam_share_dir = substitute(s:opam_share_dir, '[\r\n]*$', '', '')
-    let s:merlin_dir = s:opam_share_dir . "/merlin/vim"
-    if isdirectory(s:merlin_dir)
-        execute "set rtp^=" . s:merlin_dir
-    endif
-
-    let s:ocp_indent_dir = s:opam_share_dir . "/ocp-indent/vim"
-    if isdirectory(s:ocp_indent_dir)
-        execute "set rtp^=" . s:ocp_indent_dir
-    endif
 
 " }}
 
 " general-config {{
 
     filetype plugin indent on
-    syntax on
+    syntax enable
     set ttyfast
     set mouse=a
     set hidden
 
     " use system clipboard by default
     if has('clipboard')
-        if has('unnamedplus')  " When possible use + register for copy-paste
-            set clipboard=unnamed,unnamedplus
-        else         " On mac and Windows, use * register for copy-paste
-            set clipboard=unnamed
+        if has('unnamedplus')  " use + register on x11 systems
+            set clipboard+=unnamed,unnamedplus
+        else
+            set clipboard+=unnamed
         endif
     endif
 
@@ -156,10 +113,28 @@
     set splitright                  " open splits to right
     set splitbelow                  " open splits to bottom
 
+    " Cursor settings for Vim
+    "  1 -> blinking block
+    "  2 -> solid block
+    "  3 -> blinking underscore
+    "  4 -> solid underscore
+    "  5 -> blinking vertical bar
+    "  6 -> solid vertical bar
+
+    let &t_SI.="\<esc>[5 q" "SI = INSERT mode
+    let &t_SR.="\<esc>[4 q" "SR = REPLACE mode
+    let &t_EI.="\<esc>[2 q" "EI = NORMAL mode (ELSE)
+
+    set ttimeout
+    set ttimeoutlen=10  " reduce timeout for keycodes
+
     " 24 bit color set when available
-    " if $TERM =~# '.*256.*\|kitty' && $COLORTERM ==# 'truecolor'
-    "     set termguicolors
-    " endif
+    if $TERM =~# '.*256color.*' || $COLORTERM ==# 'truecolor'
+        " set Vim-specific sequences for RGB colors
+        let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
+        let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
+        set termguicolors
+    endif
 
     " theme
     set background=dark
@@ -171,15 +146,17 @@
 
     " Line numbering
     set number
+    set relativenumber
     augroup numbering
-        autocmd!
-        autocmd InsertEnter * set norelativenumber
-        autocmd InsertLeave * set relativenumber
-		autocmd BufEnter * set relativenumber
+        autocmd! numbering
+        autocmd InsertEnter * setlocal norelativenumber
+        autocmd InsertLeave * setlocal relativenumber
 
         " disable numbering in terminals
         if s:nvim
             autocmd TermOpen * setlocal nonumber norelativenumber
+        else
+            autocmd TerminalOpen * setlocal nonumber norelativenumber nolist
         endif
     augroup END
 
@@ -226,13 +203,14 @@
     endif
 
     " set undo and backup when using neovim
-    if s:nvim
-        " set backup
-        if has('persistent_undo')
-            set undofile                " So is persistent undo ...
-            set undolevels=1000         " Maximum number of changes that can be undone
-            set undoreload=10000        " Maximum number lines to save for undo on a buffer reload
+    if has('persistent_undo')
+        if !s:nvim
+            call mkdir($HOME.'/.local/share/vim/undo', 'p')
+            set undodir=$HOME/.local/share/vim/undo
         endif
+        set undofile                " So is persistent undo ...
+        set undolevels=1000         " Maximum number of changes that can be undone
+        set undoreload=10000        " Maximum number lines to save for undo on a buffer reload
     endif
 
 " }}
@@ -344,9 +322,9 @@
     " config editing {{
 
         nnoremap <leader><leader>s
-                    \ :source ~/.config/nvim/init.vim<CR>
+                    \ :source ~/.vimrc<CR>
         nnoremap <leader><leader>e
-                    \ :e ~/.config/nvim/init.vim<CR>
+                    \ :e ~/.vimrc<CR>
 
         " config filetypes
         augroup config_ft
@@ -361,12 +339,6 @@
 " }}
 
 " plugin-config {{
-
-" signify {{
-
-    let g:signfiy_vcs_list = [ 'git', 'hg' ]
-
-" }}
 
     " lightline {{
 
@@ -385,7 +357,7 @@
                     \     ],
                     \   },
                     \ 'component_function': {
-                    \     'gitbranch': 'fugitive#head',
+                    \     'gitbranch': 'FugitiveHead',
                     \   },
                     \ 'component_expand': {
                     \     'linter_checking': 'lightline#ale#checking',
@@ -418,55 +390,6 @@
 
     " }}
 
-    " ncm2 {{
-
-        " enable ncm2 for all buffers
-        autocmd BufEnter * call ncm2#enable_for_buffer()
-
-        set completeopt=noinsert,menuone,noselect
-        " suppress the annoying 'match x of y', 'The only match'
-        " and 'Pattern not found' messages
-        set shortmess+=c
-
-        " CTRL-C doesn't trigger the InsertLeave autocmd . map to <ESC> instead.
-        inoremap <C-c> <ESC>
-
-        " Popup menu settings
-        let g:ncm2#auto_popup = 0
-        let g:ncm2#popup_limit = 10
-        let g:ncm#total_popup_limit = 10
-        let g:ncm2#manual_complete_length = [[1,1]]
-
-        " Use CTRL-Space to trigger completion
-        inoremap <C-Space> <C-r>=ncm2#manual_trigger()<CR>
-
-        " Use <TAB> to select the popup menu:
-        inoremap <expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
-        inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-
-        inoremap <expr> <C-j> pumvisible() ? "\<C-n>" : "\<C-j>"
-        inoremap <expr> <C-k> pumvisible() ? "\<C-p>" : "\<C-k>"
-
-    " }}
-
-    " language server registration {{
-
-        let g:LanguageClient_serverCommands = {
-            \ 'python': ['pyls'],
-            \ }
-
-    " }}
-
-    " ultisnips {{
-
-        inoremap <silent> <expr> <CR> ncm2_ultisnips#expand_or("\<CR>", 'n')
-        let g:UltiSnipsExpandTrigger        = "<Plug>(ultisnips_expand)"
-        let g:UltiSnipsJumpForwardTrigger   = "<C-j>"
-        let g:UltiSnipsJumpBackwardTrigger  = "<C-k>"
-        let g:UltiSnipsRemoveSelectModeMappings = 0
-
-    "" }}
-
     " fzf {{
 
         let g:fzf_command_prefix = 'F'
@@ -475,7 +398,7 @@
         nnoremap sf :FFiles<CR>
         nnoremap sh :FHistory<CR>
         nnoremap sm :FMarks<CR>
-        nnoremap sr :FTags<CR>
+        nnoremap st :FTags<CR>
         nnoremap s: :FHistory:<CR>
 
         " Search
@@ -491,4 +414,9 @@
     " }}
 
 " }}
+
+" post init
+if filereadable(expand('$HOME/.vimrc.after.vim'))
+    exe 'source ~/.vimrc.after.vim'
+endif
 
