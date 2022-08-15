@@ -61,12 +61,7 @@ endif
 
     " fzf
     Plug 'junegunn/fzf'
-    Plug '~/.config/nvim/fzf.vim'
-
-    " ale
-    let g:ale_disable_lsp = 1
-    Plug 'dense-analysis/ale'
-    Plug 'maximbaz/lightline-ale'
+    Plug '~/.vim/fzf.vim'
 
     " syntax
     Plug 'sheerun/vim-polyglot'
@@ -134,6 +129,11 @@ endif
         let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
         let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
         set termguicolors
+    endif
+
+    if $TERM =~ 'xterm'
+        let &t_ti = "\<Esc>[?47h"
+        let &t_te = "\<Esc>[?47l"
     endif
 
     " theme
@@ -372,21 +372,6 @@ endif
                     \     'linter_ok': 'left',
                     \   },
                     \ }
-
-    " }}
-
-    " ALE {{
-
-        let g:ale_lint_on_text_changed = 'never'
-        let g:ale_lint_on_enter = 0
-        let g:ale_lint_on_save = 1
-
-        " Linting shortcuts
-        nmap <leader>al <Plug>(ale_lint)
-        nmap <leader>ar <Plug>(ale_reset_buffer)
-        nmap <leader>ad <Plug>(ale_detail)
-        nmap <leader>an <Plug>(ale_next_wrap)
-        nmap <leader>ap <Plug>(ale_previous_wrap)
 
     " }}
 

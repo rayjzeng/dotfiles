@@ -241,9 +241,9 @@ if [[ "$VENDOR-$OSTYPE" = apple-darwin* ]]; then  # override on mac
 else
 fi
 
-alias l='ls -1A'
+alias l='ls -A'
 alias ll='ls -lh'
-alias la='ll -lA'
+alias la='ll -A'
 
 alias mkdir='mkdir -p'
 
