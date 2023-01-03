@@ -164,7 +164,7 @@ setopt EXTENDED_GLOB       # Needed for file modification glob modifiers with co
 # - '.' matches plain files
 # - 'mh-23' matches files/directories that were modified within the last 23 hrs
 # $# evaluates to the length of the parameter
-autoload -Uz compinit
+autoload -Uz compinit bashcompinit
 _comp_files=(${ZDORDIR:-$HOME}/.zcompdump(N.mh-23))
 if (( $#_comp_files )); then
   compinit -C;
@@ -172,6 +172,8 @@ else
   compinit -d "$ZDOTDIR/.zcompdump";
 fi
 unset _comp_files
+
+bashcompinit
 
 unsetopt EXTENDED_GLOB
 
