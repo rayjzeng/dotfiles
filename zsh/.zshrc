@@ -95,9 +95,9 @@ setopt HIST_SAVE_NO_DUPS
 setopt HIST_VERIFY
 setopt HIST_BEEP
 
-HISTFILE="$ZDOTDIR/.zsh_history"  # History file location
-HISTSIZE=50000                             # Internal history size
-SAVEHIST=50000                             # History file size
+HISTFILE="$ZDOTDIR/.zsh_history"    # History file location
+HISTSIZE=1000000                    # Internal history size
+SAVEHIST=1000000                    # History file size
 
 # use history substring search
 z_hist_search=$ZMODULES/zsh-history-substring-search/zsh-history-substring-search.zsh
