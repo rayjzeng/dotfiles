@@ -60,16 +60,22 @@ fi
 
 zmodload zsh/terminfo
 
-# # Bind <Shift-Tab> to go to the previous menu item.
+# Bind <Shift-Tab> to go to the previous menu item.
 if [[ -n ${terminfo[kcbt]} ]] bindkey ${terminfo[kcbt]} reverse-menu-complete
 
-# # fix some keys
+# fix some keys
 if [[ -n ${key[Home]} ]] bindkey ${key[Home]} beginning-of-line
 if [[ -n ${key[End]} ]] bindkey ${key[End]} end-of-line
 if [[ -n ${key[PageUp]} ]] bindkey ${key[PageUp]} up-line-or-history
 if [[ -n ${key[PageDown]} ]] bindkey ${key[PageDown]} down-line-or-history
 if [[ -n ${key[Insert]} ]] bindkey ${key[Insert]} overwrite-mode
 if [[ -n ${key[Delete]} ]] bindkey ${key[Delete]} delete-char
+
+# iTerm2 opt+arrow key binds
+bindkey '^[[1;3C' forward-word
+bindkey '^[[1;3D' backward-word
+bindkey '^[[1;3A' history-substring-search-up
+bindkey '^[[1;3B' history-substring-search-down
 
 # }}}
 
@@ -200,7 +206,9 @@ fi
 alias e="$EDITOR"
 
 # FZF
-[[ -f "$HOME/.fzf.zsh" ]] && source "$HOME/.fzf.zsh"
+if command -v fzf &> /dev/null; then
+  source <(fzf --zsh)
+fi
 if whence fd &>/dev/null; then
   export FZF_DEFAULT_COMMAND='fd -H -E "{**/.git,**/.hg,**/.svn}"'
   export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
@@ -281,8 +289,8 @@ function activate() {
 }
 
 # Eternal Terminal and tmux
-alias eta="et -c 'tmux new-session -As auto'"   # join auto tmux session
-alias ett="et -c 'tmux new-session'"            # start new tmux session
+alias eta="et -c 'tmux new-session -As auto'"     # join auto tmux session
+alias etc="et -c 'tmux -CC new-session -As auto'" # join auto in control mode
 
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"

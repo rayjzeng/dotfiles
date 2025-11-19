@@ -131,11 +131,6 @@ endif
         set termguicolors
     endif
 
-    if $TERM =~ 'xterm'
-        let &t_ti = "\<Esc>[?47h"
-        let &t_te = "\<Esc>[?47l"
-    endif
-
     " theme
     set background=dark
     let g:gruvbox_contrast_dark="hard"
