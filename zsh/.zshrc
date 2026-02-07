@@ -25,6 +25,12 @@ if (( ${+BREWDIR} )); then
   export PATH
 fi
 
+path=(
+  "$HOME/.local/bin"
+  $path
+  "/Applications/WezTerm.app/Contents/MacOS"
+)
+
 setopt LONG_LIST_JOBS     # List jobs in the long format by default.
 setopt NOTIFY             # Report status of background jobs immediately.
 unsetopt BG_NICE          # Don't run all background jobs at a lower priority.
