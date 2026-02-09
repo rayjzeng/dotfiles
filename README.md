@@ -74,5 +74,6 @@ See docs at [fzf](https://github.com/junegunn/fzf)
 ----------------------------
 
 ### zsh/.zmodules/third-party
-These need to be updated manually but should be relatively stable:
-- [Curl zsh completions](https://github.com/curl/curl/blob/master/scripts/completion.pl)
+These zsh modules need to be updated manually but should be relatively stable:
+- [curl completions](https://github.com/curl/curl/blob/master/scripts/completion.pl)
+- [bash completions](https://raw.githubusercontent.com/git/git/refs/heads/master/contrib/completion/git-completion.bash)
