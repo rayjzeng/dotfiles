@@ -142,7 +142,7 @@ zstyle ':completion::complete:*' use-cache on
 zstyle ':completion::complete:*' cache-path "$ZDOTDIR/.zcompcache"
 
 # Load completions from zsh-completions
-_module="$ZMODULES/zsh-completions" 
+_module="$ZMODULES/zsh-completions"
 [[ -d $_module ]] && fpath=($_module $fpath)
 
 # Load more completions
