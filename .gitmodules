@@ -1,6 +1,3 @@
-[submodule "tmux/.tmux/plugins/tpm"]
-	path = tmux/.tmux/plugins/tpm
-	url = git@github.com:tmux-plugins/tpm.git
 [submodule "dependencies/fzf.vim"]
 	path = nvim/fzf.vim
 	url = git@github.com:rayjzeng/fzf.vim.git
