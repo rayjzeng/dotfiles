@@ -85,16 +85,6 @@ bindkey '^[[1;3B' history-substring-search-down
 
 # }}}
 
-# syntax highlighting {{{
-
-z_syntax_path=$ZMODULES/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-[[ -f "$z_syntax_path" ]] && source $z_syntax_path
-unset z_syntax_path
-
-ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets cursor)
-
-# }}}
-
 # history {{{
 
 setopt APPENDHISTORY
@@ -254,6 +244,7 @@ if [[ "$VENDOR-$OSTYPE" = apple-darwin* ]]; then  # override on mac
   else
     alias ls='ls -G'
   fi
+  export GREP_COLOR='1;97;45'  # mac uses BSD grep
 else
 fi
 
@@ -264,8 +255,7 @@ alias la='ll -A'
 alias mkdir='mkdir -p'
 
 # grep colors
-export GREP_COLOR='1;97;45'                                             # BSD.
-export GREP_COLORS='mt=$GREP_COLOR:sl=:cx=:fn=35:ln=32:bn=32:se=36'     # GNU.
+export GREP_COLORS='mt=$1;97;45:sl=:cx=:fn=35:ln=32:bn=32:se=36'     # GNU.
 alias grep='grep --color=auto'
 
 # less options and styling defaults
@@ -300,6 +290,16 @@ alias etc="et -c 'tmux -CC new-session -As auto'" # join auto in control mode
 
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
+
+# }}}
+
+# syntax highlighting {{{
+
+z_syntax_path=$ZMODULES/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+[[ -f "$z_syntax_path" ]] && source $z_syntax_path
+unset z_syntax_path
+
+ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets cursor)
 
 # }}}
 
