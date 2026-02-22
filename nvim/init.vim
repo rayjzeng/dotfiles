@@ -33,21 +33,13 @@ endif
 
     call plug#begin(s:plugdir)
 
-    " tmux integration
-    Plug 'christoomey/vim-tmux-navigator'
-    Plug 'rayjzeng/vim-tmux-clipboard'
-    Plug 'tmux-plugins/vim-tmux-focus-events'
-
     " themes
     Plug 'gruvbox-community/gruvbox'
 
     " Statusline
     Plug 'itchyny/lightline.vim'
 
-    " directory navigator
-    Plug 'justinmk/vim-dirvish'
-
-    " Movement
+    " inline movement highlighting
     Plug 'unblevable/quick-scope'
 
     " Text manipulation
@@ -58,10 +50,6 @@ endif
     " Git integration
     Plug 'tpope/vim-fugitive'
     Plug 'mhinz/vim-signify'
-
-    " fzf
-    Plug 'junegunn/fzf'
-    Plug '~/.vim/fzf.vim'
 
     " syntax
     Plug 'sheerun/vim-polyglot'
@@ -367,29 +355,6 @@ endif
                     \     'linter_ok': 'left',
                     \   },
                     \ }
-
-    " }}
-
-    " fzf {{
-
-        let g:fzf_command_prefix = 'F'
-        nnoremap s <Nop>
-
-        nnoremap sf :FFiles<CR>
-        nnoremap sh :FHistory<CR>
-        nnoremap sm :FMarks<CR>
-        nnoremap st :FTags<CR>
-        nnoremap s: :FHistory:<CR>
-
-        " Search
-        nnoremap sg :FRg<Space>
-        nnoremap s/ :FBLines<Space>
-        nnoremap s? :FLines<Space>
-
-        " Buffers
-        let g:fzf_buffers_jump = 1  " jump to existing tabs
-        nnoremap ss :FBuffers<CR>
-        nnoremap S :FWindows<CR>
 
     " }}
 
