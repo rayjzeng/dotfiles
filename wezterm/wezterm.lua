@@ -55,5 +55,22 @@ config.keys = {
   { key = "DownArrow", mods = "SHIFT", action = wezterm.action.ScrollToPrompt(1) },
 }
 
+-- Merge local overrides into config (local values win)
+local function merge(base, overrides)
+  for k, v in pairs(overrides) do
+    if type(v) == 'table' and type(base[k]) == 'table' and not v[1] then
+      merge(base[k], v)
+    else
+      base[k] = v
+    end
+  end
+end
+
+-- Source machine-local overrides if they exist
+local ok, local_overrides = pcall(require, 'wezterm_local')
+if ok and type(local_overrides) == 'table' then
+  merge(config, local_overrides)
+end
+
 -- Return the configuration to wezterm
 return config
