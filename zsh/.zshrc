@@ -303,5 +303,8 @@ ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets cursor)
 
 # }}}
 
+# WezTerm shell integration (scroll-to-prompt, CWD tracking, semantic zones)
+[[ -f "$HOME/.config/wezterm/wezterm.sh" ]] && source "$HOME/.config/wezterm/wezterm.sh"
+
 # source post init
 [[ -f "$ZDOTDIR/.zshrc.after.zsh" ]] && source "$ZDOTDIR/.zshrc.after.zsh"
