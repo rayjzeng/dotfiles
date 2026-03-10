@@ -53,6 +53,8 @@ config.keys = {
   -- Jump between prompts with arrows
   { key = "UpArrow",   mods = "SHIFT", action = wezterm.action.ScrollToPrompt(-1) },
   { key = "DownArrow", mods = "SHIFT", action = wezterm.action.ScrollToPrompt(1) },
+  -- Shift+Enter sends newline for Claude Code multi-line input
+  { key = 'Enter', mods = 'SHIFT', action = wezterm.action.SendString '\n' },
 }
 
 -- Merge local overrides into config (local values win)
