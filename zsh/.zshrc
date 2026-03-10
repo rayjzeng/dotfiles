@@ -284,12 +284,20 @@ function activate() {
   fi
 }
 
-# Eternal Terminal and tmux
-alias eta="et -c 'tmux new-session -As auto'"     # join auto tmux session
-alias etc="et -c 'tmux -CC new-session -As auto'" # join auto in control mode
+# Eternal Terminal and tmux auto session wrapped in x2ssh
+etc() {
+    x2ssh -et "$1" -c 'tmux -CC new-session -As auto'
+  }
+
+alias g=git
+alias cl=claude
+clf() { cat "$1" | claude --dangerously-skip-permissions; }
 
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
+
+# WezTerm shell integration (scroll-to-prompt, CWD tracking, semantic zones)
+[[ -f "$HOME/.config/wezterm/wezterm.sh" ]] && source "$HOME/.config/wezterm/wezterm.sh"
 
 # }}}
 
@@ -302,9 +310,6 @@ unset z_syntax_path
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets cursor)
 
 # }}}
-
-# WezTerm shell integration (scroll-to-prompt, CWD tracking, semantic zones)
-[[ -f "$HOME/.config/wezterm/wezterm.sh" ]] && source "$HOME/.config/wezterm/wezterm.sh"
 
 # source post init
 [[ -f "$ZDOTDIR/.zshrc.after.zsh" ]] && source "$ZDOTDIR/.zshrc.after.zsh"
