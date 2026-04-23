@@ -91,7 +91,6 @@ endif
     set scrolloff=1                 " min lines above/below cursor
     set sidescrolloff=1             " min columns left/right cursor
 
-    set colorcolumn=80              " visual ruler
     set cursorline                  " highlight cursor line
 
     set splitright                  " open splits to right
@@ -129,20 +128,13 @@ endif
         colorscheme dracula
     endif
 
-    " Line numbering
-    set number
-    set relativenumber
+    " Line numbering — only in insert mode
+    set nonumber
+    set norelativenumber
     augroup numbering
         autocmd! numbering
-        autocmd InsertEnter * setlocal norelativenumber
-        autocmd InsertLeave * setlocal relativenumber
-
-        " disable numbering in terminals
-        if s:nvim
-            autocmd TermOpen * setlocal nonumber norelativenumber
-        else
-            autocmd TerminalOpen * setlocal nonumber norelativenumber nolist
-        endif
+        autocmd InsertEnter * setlocal number norelativenumber
+        autocmd InsertLeave * setlocal nonumber norelativenumber
     augroup END
 
     " search
