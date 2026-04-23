@@ -14,6 +14,10 @@
 
 # env {{{
 
+if [[ -n "$SSH_TTY" || -n "$SSH_CONNECTION" || -n "$SSH_CLIENT" ]]; then
+  export IS_REMOTE=1
+fi
+
 # Add Homebrew to path if configured
 if (( ${+BREWDIR} )); then
   typeset -U path

@@ -34,7 +34,8 @@ endif
     call plug#begin(s:plugdir)
 
     " themes
-    Plug 'gruvbox-community/gruvbox'
+	Plug 'dracula/vim', { 'as': 'dracula' }
+    Plug 'folke/tokyonight.nvim'
 
     " Statusline
     Plug 'itchyny/lightline.vim'
@@ -121,11 +122,12 @@ endif
 
     " theme
     set background=dark
-    let g:gruvbox_contrast_dark="hard"
-    let g:gruvbox_contrast_light="medium"
-    let g:gruvbox_sign_column="bg0"
-    let g:gruvbox_invert_selection=0
-    colorscheme gruvbox
+    let s:is_remote = !empty($IS_REMOTE)
+    if s:is_remote
+        colorscheme tokyonight
+    else
+        colorscheme dracula
+    endif
 
     " Line numbering
     set number
@@ -326,7 +328,7 @@ endif
     " lightline {{
 
         let g:lightline = {
-                    \ 'colorscheme': 'gruvbox',
+                    \ 'colorscheme': s:is_remote ? 'tokyonight' : 'dracula',
                     \ 'active': {
                     \   'left':[
                     \       [ 'mode', 'paste' ],
@@ -364,4 +366,3 @@ endif
 if filereadable(expand('$HOME/.vimrc.after.vim'))
     exe 'source ~/.vimrc.after.vim'
 endif
-
