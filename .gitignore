@@ -6,3 +6,7 @@ tmux/.tmux/plugins/*
 **/*.swp
 
 dependencies/Brewfile.lock.json
+
+# Claude Code - only track skills
+.claude/*
+!.claude/skills/
