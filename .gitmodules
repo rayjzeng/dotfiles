@@ -1,9 +1,11 @@
 [submodule "zsh2/zmodules/zsh-completions"]
 	path = zsh/.zmodules/zsh-completions
 	url = https://github.com/zsh-users/zsh-completions.git
+	ignore = untracked
 [submodule "zsh2/zmodules/zsh-syntax-highlighting"]
 	path = zsh/.zmodules/zsh-syntax-highlighting
 	url = https://github.com/zsh-users/zsh-syntax-highlighting.git
+	ignore = untracked
 [submodule "zsh2/zmodules/zsh-history-substring-search"]
 	path = zsh/.zmodules/zsh-history-substring-search
 	url = https://github.com/zsh-users/zsh-history-substring-search.git
