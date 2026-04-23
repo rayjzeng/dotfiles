@@ -35,7 +35,7 @@ endif
 
     " themes
 	Plug 'dracula/vim', { 'as': 'dracula' }
-    Plug 'folke/tokyonight.nvim'
+    Plug 'ghifarit53/tokyonight-vim'
 
     " Statusline
     Plug 'itchyny/lightline.vim'
