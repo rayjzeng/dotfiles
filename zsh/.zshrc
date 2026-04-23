@@ -210,18 +210,11 @@ if whence fd &>/dev/null; then
   export FZF_CTRL_T_COMMAND='fd -I -H -E "{**/.git,**/.hg,**/.svn}"'
 fi
 
-# z.lua
-zlua_path="$ZMODULES/z.lua/z.lua"
-if [[ -f "$zlua_path" ]]; then
-  eval "$(lua ${zlua_path} --init zsh)"
-
-  export _ZL_MATCH_MODE=1  # use enhanced matching so z acts like cd for unvisited directories
-
-  alias zb="z -b"
-  alias zf="z -I"
-  alias zbf="z -b -I"
+# zoxide (fast directory jumper)
+if command -v zoxide &> /dev/null; then
+  eval "$(zoxide init zsh)"
+  alias zf="zi"
 fi
-unset zlua_path
 
 # Expand aliases with <C-Space>
 function expand_alias() {
@@ -260,20 +253,20 @@ alias grep='grep --color=auto'
 
 # less options and styling defaults
 export LESS='-F -i -M -R -S -z-2 -q'
-export LESS_TERMCAP_mb=$(tput bold; tput setaf 2)                 # green for blink
-export LESS_TERMCAP_md=$(tput bold; tput setaf 5)                 # magenta for bold
-export LESS_TERMCAP_me=$(tput sgr0)                               # end bold
-export LESS_TERMCAP_so=$(tput bold; tput setaf 0; tput setab 15)  # black on white for standout
-export LESS_TERMCAP_se=$(tput rmso; tput sgr0)                    # end standout
-export LESS_TERMCAP_us=$(tput smul; tput bold; tput setaf 6)      # cyan for underline
-export LESS_TERMCAP_ue=$(tput rmul; tput sgr0)                    # end underline
-export LESS_TERMCAP_mr=$(tput rev)                                # reverse video mode
-export LESS_TERMCAP_mh=$(tput dim)                                # dim mode
-export LESS_TERMCAP_ZN=$(tput ssubm)                              # subscript
-export LESS_TERMCAP_ZV=$(tput rsubm)                              # exit subscript
-export LESS_TERMCAP_ZO=$(tput ssupm)                              # superscript
-export LESS_TERMCAP_ZW=$(tput rsupm)                              # exit superscript
-export GROFF_NO_SGR=1                                             # For Konsole and Gnome-terminal
+export LESS_TERMCAP_mb=$'\e[1;32m'
+export LESS_TERMCAP_md=$'\e[1;35m'
+export LESS_TERMCAP_me=$'\e(B\e[m'
+export LESS_TERMCAP_so=$'\e[1;30;107m'
+export LESS_TERMCAP_se=$'\e[27m\e(B\e[m'
+export LESS_TERMCAP_us=$'\e[4;1;36m'
+export LESS_TERMCAP_ue=$'\e[24m\e(B\e[m'
+export LESS_TERMCAP_mr=$'\e[7m'
+export LESS_TERMCAP_mh=$'\e[2m'
+export LESS_TERMCAP_ZN=$'\e[s'
+export LESS_TERMCAP_ZV=$'\e[u'
+export LESS_TERMCAP_ZO=$'\e[s'
+export LESS_TERMCAP_ZW=$'\e[u'
+export GROFF_NO_SGR=1
 
 # python venv
 function activate() {
@@ -291,7 +284,25 @@ etc() {
 
 alias g=git
 alias cl=claude
-clf() { cat "$1" | claude --dangerously-skip-permissions; }
+cls() { claude --dangerously-skip-permissions; }
+clsf() { cat "$1" | claude --dangerously-skip-permissions; }
+
+# lazy-load NVM — defers ~800ms of startup cost until first use
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  nvm()  { unset -f nvm node npm npx; \. "$NVM_DIR/nvm.sh"; nvm "$@"; }
+  node() { unset -f nvm node npm npx; \. "$NVM_DIR/nvm.sh"; node "$@"; }
+  npm()  { unset -f nvm node npm npx; \. "$NVM_DIR/nvm.sh"; npm "$@"; }
+  npx()  { unset -f nvm node npm npx; \. "$NVM_DIR/nvm.sh"; npx "$@"; }
+fi
+
+# BEGIN opam configuration
+# This is useful if you're using opam as it adds:
+#   - the correct directories to the PATH
+#   - auto-completion for the opam binary
+# This section can be safely removed at any time if needed.
+[[ ! -r '/Users/rayzeng/.opam/opam-init/init.zsh' ]] || source '/Users/rayzeng/.opam/opam-init/init.zsh' > /dev/null 2> /dev/null
+# END opam configuration
 
 # iterm2 integration
 [[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
