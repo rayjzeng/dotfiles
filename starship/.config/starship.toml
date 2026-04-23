@@ -2,16 +2,15 @@
 
 format = """
 $cmd_duration\
-$hostname\
-$username\
-$localip\
+$jobs\
 $shlvl\
 $shell\
-$jobs\
-$sudo\
 $character"""
 
 right_format = """
+$username\
+$hostname\
+$localip\
 $directory\
 $git_branch\
 $git_state\
@@ -20,12 +19,17 @@ $python\
 $time
 """
 
+[hostname]
+ssh_only = false
+format = "[$hostname]($style) "
+style = "bright-yellow bold"
+
 [username]
 style_user = "bright-yellow bold italic"
 style_root = "purple bold italic"
 format = "[⭘ $user]($style) "
 disabled = false
-show_always = false
+show_always = true
 
 [localip]
 ssh_only = true
@@ -41,7 +45,7 @@ symbol = "[▶](blue italic)"
 format = "[$symbol]($style)"
 style = "bold italic bright-purple"
 symbol = "⋈┈"
-disabled = false
+disabled = true
 
 [directory]
 style = "blue"
