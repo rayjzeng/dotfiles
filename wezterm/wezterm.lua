@@ -51,7 +51,11 @@ config.mouse_bindings = {
 
 -- Switch color scheme for remote sessions
 wezterm.on('update-status', function(window, pane)
-  local is_remote = pane:get_domain_name() ~= 'local' or pane:get_foreground_process_name():find('ssh') ~= nil
+  local is_remote = pane:get_domain_name() ~= 'local'
+  if not is_remote then
+    local proc = pane:get_foreground_process_name()
+    is_remote = proc ~= nil and proc:find('ssh') ~= nil
+  end
   local overrides = window:get_config_overrides() or {}
 
   if is_remote then
@@ -64,8 +68,11 @@ wezterm.on('update-status', function(window, pane)
 end)
 
 wezterm.on('format-tab-title', function(tab, tabs, panes, config, hover, max_width)
-  local title = string.format(' %-11s', tab.active_pane.title)
-  return title
+  local title = tab.tab_title
+  if not title or #title == 0 then
+    title = tab.active_pane.title
+  end
+  return string.format(' %-11s', title)
 end)
 
 wezterm.on('trigger-vi-with-scrollback', function(window, pane)
