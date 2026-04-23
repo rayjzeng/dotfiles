@@ -5,7 +5,7 @@ local home = os.getenv('HOME')
 
 config.color_scheme = 'Dracula (Official)'
 
-config.font = wezterm.font('JetBrains Mono')
+config.font = wezterm.font('JetBrainsMono Nerd Font Mono')
 config.font_size = 12.0
 
 config.scrollback_lines = 20000

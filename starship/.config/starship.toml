@@ -1,0 +1,101 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+format = """
+$cmd_duration\
+$hostname\
+$username\
+$localip\
+$shlvl\
+$shell\
+$jobs\
+$sudo\
+$character"""
+
+right_format = """
+$directory\
+$git_branch\
+$git_state\
+$git_status\
+$python\
+$time
+"""
+
+[username]
+style_user = "bright-yellow bold italic"
+style_root = "purple bold italic"
+format = "[⭘ $user]($style) "
+disabled = false
+show_always = false
+
+[localip]
+ssh_only = true
+format = " ◯[$localipv4](bold magenta)"
+disabled = false
+
+[jobs]
+format = "[$symbol$number]($style) "
+style = "white"
+symbol = "[▶](blue italic)"
+
+[sudo]
+format = "[$symbol]($style)"
+style = "bold italic bright-purple"
+symbol = "⋈┈"
+disabled = false
+
+[directory]
+style = "blue"
+home_symbol = "⌂"
+truncation_length = 2
+truncation_symbol = "…/"
+read_only = " ◈"
+use_os_path_sep = true
+format = '[$path]($style)[$read_only]($read_only_style)'
+repo_root_style = 'bold blue'
+repo_root_format = '[$before_root_path]($before_repo_root_style)[$repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) [](bold bright-blue)'
+
+[fill]
+symbol = ' '
+
+[character]
+format = "$symbol "
+success_symbol = "[◎](bold italic purple)"
+error_symbol = "[○](italic red)"
+vimcmd_symbol = "[■](italic bright-yellow))"
+
+[git_branch]
+symbol = " "
+format = "[$symbol$branch]($style)"
+style = "bright-black"
+
+[git_status]
+format = "[[($conflicted$untracked$modified$staged$renamed$deleted)](218) ($ahead_behind$stashed)]($style)"
+style = "cyan"
+conflicted = "="
+untracked = "?"
+modified = "!"
+staged = "+"
+renamed = "»"
+deleted = "✘"
+stashed = "≡"
+
+[git_state]
+format = '\([$state( $progress_current/$progress_total)]($style)\) '
+style = "bright-black"
+
+[cmd_duration]
+format = "[$duration]($style) "
+style = "yellow"
+
+[python]
+format = "[$virtualenv]($style) "
+style = "bright-black"
+detect_extensions = []
+detect_files = []
+
+[time]
+disabled = false
+format = "[ $time]($style)"
+time_format = "%R"
+utc_time_offset = "local"
+style = "italic dimmed white"

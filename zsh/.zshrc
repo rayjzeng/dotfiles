@@ -187,11 +187,8 @@ unsetopt EXTENDED_GLOB
 
 # prompt {{{
 
-if [[ -d "$ZMODULES/zsh-clean" ]]; then
-  autoload -U promptinit
-  fpath=($prompt_themes "$ZMODULES/zsh-clean" $fpath)
-  promptinit
-  prompt clean 256
+if command -v starship &> /dev/null; then
+  eval "$(starship init zsh)"
 fi
 
 # }}}
