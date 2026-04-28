@@ -10,31 +10,29 @@ $character"""
 right_format = """
 $username\
 $hostname\
-$localip\
 $directory\
 $git_branch\
 $git_state\
 $git_status\
+$hg_branch\
+$hg_state\
 $python\
 $time
 """
 
 [hostname]
 ssh_only = false
+detect_env_vars = ["IS_REMOTE"]
 format = "[$hostname]($style) "
 style = "bright-yellow bold"
+disabled = false
 
 [username]
 style_user = "bright-yellow bold italic"
 style_root = "purple bold italic"
 format = "[⭘ $user]($style) "
-disabled = false
-show_always = true
-
-[localip]
-ssh_only = true
-format = " ◯[$localipv4](bold magenta)"
-disabled = false
+show_always = false
+detect_env_vars = ["IS_REMOTE"]
 
 [jobs]
 format = "[$symbol$number]($style) "
@@ -67,10 +65,25 @@ success_symbol = "[◎](bold italic purple)"
 error_symbol = "[○](italic red)"
 vimcmd_symbol = "[■](italic bright-yellow))"
 
+[hg_branch]
+symbol = " "
+format = "[$symbol$branch]($style)"
+style = "bright-black"
+truncation_length = 20
+truncation_symbol = "…"
+disabled = false
+
+[hg_state]
+format = '\([$state]($style)\) '
+style = "cyan"
+disabled = false
+
 [git_branch]
 symbol = " "
 format = "[$symbol$branch]($style)"
 style = "bright-black"
+truncation_length = 20
+truncation_symbol = "…"
 
 [git_status]
 format = "[[($conflicted$untracked$modified$staged$renamed$deleted)](218) ($ahead_behind$stashed)]($style)"
@@ -84,7 +97,7 @@ deleted = "✘"
 stashed = "≡"
 
 [git_state]
-format = '\([$state( $progress_current/$progress_total)]($style)\) '
+format = '\([$state($progress_current/$progress_total)]($style)\) '
 style = "bright-black"
 
 [cmd_duration]
