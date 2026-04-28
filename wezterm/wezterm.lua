@@ -53,6 +53,9 @@ config.mouse_bindings = {
 wezterm.on('update-status', function(window, pane)
   local is_remote = pane:get_domain_name() ~= 'local'
   if not is_remote then
+    is_remote = pane:get_user_vars().IS_REMOTE == '1'
+  end
+  if not is_remote then
     local proc = pane:get_foreground_process_name()
     is_remote = proc ~= nil and proc:find('ssh') ~= nil
   end
