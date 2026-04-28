@@ -269,6 +269,10 @@ export LESS_TERMCAP_ZO=$'\e[s'
 export LESS_TERMCAP_ZW=$'\e[u'
 export GROFF_NO_SGR=1
 
+alias g=git
+alias cl=claude
+cls() { claude --dangerously-skip-permissions; }
+
 # python venv
 function activate() {
   if [ $# -ne 1 ]; then
@@ -277,16 +281,6 @@ function activate() {
     source "$1/bin/activate"
   fi
 }
-
-# Eternal Terminal and tmux auto session wrapped in x2ssh
-etc() {
-    x2ssh -et "$1" -c 'tmux -CC new-session -As auto'
-  }
-
-alias g=git
-alias cl=claude
-cls() { claude --dangerously-skip-permissions; }
-clsf() { cat "$1" | claude --dangerously-skip-permissions; }
 
 # lazy-load NVM — defers ~800ms of startup cost until first use
 export NVM_DIR="$HOME/.nvm"
@@ -304,9 +298,6 @@ fi
 # This section can be safely removed at any time if needed.
 [[ ! -r '/Users/rayzeng/.opam/opam-init/init.zsh' ]] || source '/Users/rayzeng/.opam/opam-init/init.zsh' > /dev/null 2> /dev/null
 # END opam configuration
-
-# iterm2 integration
-[[ -e "$HOME/.iterm2_shell_integration.zsh" ]] && source "$HOME/.iterm2_shell_integration.zsh"
 
 # WezTerm shell integration (scroll-to-prompt, CWD tracking, semantic zones)
 [[ -f "$HOME/.config/wezterm/wezterm.sh" ]] && source "$HOME/.config/wezterm/wezterm.sh"
