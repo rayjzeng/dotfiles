@@ -70,11 +70,65 @@ wezterm.on('update-status', function(window, pane)
   window:set_config_overrides(overrides)
 end)
 
-wezterm.on('format-tab-title', function(tab, tabs, panes, config, hover, max_width)
-  local title = tab.tab_title
-  if not title or #title == 0 then
-    title = tab.active_pane.title
+local function basename(path)
+  if not path or #path == 0 then
+    return nil
   end
+
+  local normalized = path:gsub('[\\/]$', '')
+  if #normalized == 0 then
+    return nil
+  end
+
+  return normalized:match('([^/\\]+)$') or normalized
+end
+
+local function cwd_label(cwd)
+  if not cwd then
+    return nil
+  end
+
+  if type(cwd) == 'table' and cwd.file_path then
+    return basename(cwd.file_path)
+  end
+
+  if type(cwd) == 'string' then
+    return basename(cwd)
+  end
+
+  return nil
+end
+
+local function resolve_tab_title(tab)
+  local explicit = tab.tab_title
+  if explicit and #explicit > 0 then
+    return explicit
+  end
+
+  local pane = tab.active_pane
+  if not pane then
+    return 'shell'
+  end
+
+  if pane.title and #pane.title > 0 then
+    return pane.title
+  end
+
+  local cwd = cwd_label(pane.current_working_dir)
+  if cwd and #cwd > 0 then
+    return cwd
+  end
+
+  local proc = basename(pane.foreground_process_name)
+  if proc and #proc > 0 then
+    return proc
+  end
+
+  return 'shell'
+end
+
+wezterm.on('format-tab-title', function(tab, tabs, panes, config, hover, max_width)
+  local title = wezterm.truncate_right(resolve_tab_title(tab), math.max(max_width - 1, 1))
   return string.format(' %-11s', title)
 end)
 

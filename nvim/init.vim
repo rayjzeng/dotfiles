@@ -34,7 +34,7 @@ endif
     call plug#begin(s:plugdir)
 
     " themes
-	Plug 'dracula/vim', { 'as': 'dracula' }
+    Plug 'dracula/vim', { 'as': 'dracula' }
     Plug 'ghifarit53/tokyonight-vim'
 
     " Statusline
@@ -53,9 +53,7 @@ endif
     Plug 'mhinz/vim-signify'
 
     " syntax
-    Plug 'sheerun/vim-polyglot'
-
-    " Auto intent detection
+    " Plug 'sheerun/vim-polyglot'
     Plug 'tpope/vim-sleuth'
 
     call plug#end()
