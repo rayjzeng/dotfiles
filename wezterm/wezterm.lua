@@ -68,7 +68,7 @@ local function pane_is_remote(pane)
   return proc ~= nil and proc:find('ssh') ~= nil
 end
 
-wezterm.on('update-status', function(window, pane)
+local function apply_remote_scheme(window, pane)
   local want = pane_is_remote(pane) and REMOTE_COLOR_SCHEME or nil
   local overrides = window:get_config_overrides() or {}
   if overrides.color_scheme == want then
@@ -76,6 +76,21 @@ wezterm.on('update-status', function(window, pane)
   end
   overrides.color_scheme = want
   window:set_config_overrides(overrides)
+end
+
+-- update-status fires on activity/focus but not reliably while a pane sits idle
+-- at the prompt, so on its own it leaves a stale scheme after a remote session
+-- exits. The shell re-emits the IS_REMOTE user var on every prompt (precmd), and
+-- user-var-changed fires immediately on that — reverting the moment you land back
+-- at a local prompt. update-status still covers mid-session, activity-driven cases.
+wezterm.on('update-status', function(window, pane)
+  apply_remote_scheme(window, pane)
+end)
+
+wezterm.on('user-var-changed', function(window, pane, name, value)
+  if name == 'IS_REMOTE' then
+    apply_remote_scheme(window, pane)
+  end
 end)
 
 local function basename(path)

@@ -16,9 +16,21 @@
 
 if [[ -n "$SSH_TTY" || -n "$SSH_CONNECTION" || -n "$SSH_CLIENT" || -n "$IS_REMOTE" ]]; then
   export IS_REMOTE=1
-  # Signal WezTerm pane so update-status can detect remote sessions
-  printf "\033]1337;SetUserVar=%s=%s\007" IS_REMOTE MQ==
 fi
+
+# Signal WezTerm the pane's remote state on every prompt. Emitting from precmd
+# (not just at startup) is what lets WezTerm revert the scheme promptly when you
+# return to a local prompt after exiting ssh — its update-status event doesn't
+# fire reliably while a pane sits idle. Values are base64: MQ=="1", MA=="0".
+function _wezterm_signal_remote {
+  if [[ -n "$IS_REMOTE" ]]; then
+    printf '\033]1337;SetUserVar=IS_REMOTE=MQ==\007'
+  else
+    printf '\033]1337;SetUserVar=IS_REMOTE=MA==\007'
+  fi
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _wezterm_signal_remote
 
 # Add Homebrew to path if configured
 if (( ${+BREWDIR} )); then
