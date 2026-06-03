@@ -49,24 +49,32 @@ config.mouse_bindings = {
     action = act.OpenLinkAtMouseCursor },
 }
 
--- Switch color scheme for remote sessions
+-- Switch color scheme for remote sessions (Enkaku mux, SSH, etc.)
+local REMOTE_COLOR_SCHEME = 'Catppuccin Mocha'
+
+local function pane_is_remote(pane)
+  -- Enkaku/SSH mux panes report the mux domain name. Exclude WezTerm's internal
+  -- overlay domain (launcher, connection progress): it appears for a beat before
+  -- the mux pane attaches, and theming it early suppresses the post-attach
+  -- repaint, leaving the connected pane on the base scheme until a manual reload.
+  local domain = pane:get_domain_name()
+  if domain ~= 'local' and domain ~= 'TermWizTerminalDomain' then
+    return true
+  end
+  if pane:get_user_vars().IS_REMOTE == '1' then
+    return true
+  end
+  local proc = pane:get_foreground_process_name()
+  return proc ~= nil and proc:find('ssh') ~= nil
+end
+
 wezterm.on('update-status', function(window, pane)
-  local is_remote = pane:get_domain_name() ~= 'local'
-  if not is_remote then
-    is_remote = pane:get_user_vars().IS_REMOTE == '1'
-  end
-  if not is_remote then
-    local proc = pane:get_foreground_process_name()
-    is_remote = proc ~= nil and proc:find('ssh') ~= nil
-  end
+  local want = pane_is_remote(pane) and REMOTE_COLOR_SCHEME or nil
   local overrides = window:get_config_overrides() or {}
-
-  if is_remote then
-    overrides.color_scheme = 'Catppuccin Mocha'
-  else
-    overrides.color_scheme = nil
+  if overrides.color_scheme == want then
+    return
   end
-
+  overrides.color_scheme = want
   window:set_config_overrides(overrides)
 end)
 

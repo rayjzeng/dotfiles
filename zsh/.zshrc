@@ -14,7 +14,7 @@
 
 # env {{{
 
-if [[ -n "$SSH_TTY" || -n "$SSH_CONNECTION" || -n "$SSH_CLIENT" ]]; then
+if [[ -n "$SSH_TTY" || -n "$SSH_CONNECTION" || -n "$SSH_CLIENT" || -n "$IS_REMOTE" ]]; then
   export IS_REMOTE=1
   # Signal WezTerm pane so update-status can detect remote sessions
   printf "\033]1337;SetUserVar=%s=%s\007" IS_REMOTE MQ==
