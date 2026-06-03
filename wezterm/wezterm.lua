@@ -171,7 +171,18 @@ config.keys = {
   { key = 'Enter', mods = 'SHIFT', action = act.SendString '\n' },
   { key = 'e', mods = 'CMD', action = act.EmitEvent 'trigger-vi-with-scrollback' },
   { key = 'k', mods = 'CMD', action = act.ClearScrollback 'ScrollbackAndViewport' },
+  { key = 'f', mods = 'CMD', action = act.Search { Regex = '' } },
 }
+
+local search_mode = wezterm.gui.default_key_tables().search_mode
+table.insert(search_mode, { key = 'r', mods = 'CMD', action = act.CopyMode 'CycleMatchType' })
+table.insert(search_mode, { key = 'g', mods = 'CMD', action = act.CopyMode 'NextMatch' })
+table.insert(search_mode, { key = 'g', mods = 'CMD|SHIFT', action = act.CopyMode 'PriorMatch' })
+table.insert(search_mode, { key = 'a', mods = 'CTRL', action = act.CopyMode 'MoveToStartOfLineContent' })
+table.insert(search_mode, { key = 'e', mods = 'CTRL', action = act.CopyMode 'MoveToEndOfLineContent' })
+table.insert(search_mode, { key = 'u', mods = 'CTRL', action = act.CopyMode 'ClearPattern' })
+config.key_tables = { search_mode = search_mode }
+
 
 -- Merge local overrides into config (local values win)
 local function merge(base, overrides)
