@@ -1,0 +1,114 @@
+#!/bin/zsh
+set -euo pipefail
+
+if (( $# > 1 )); then
+  print -u2 "usage: codex-status-line-setup [config-path]"
+  exit 2
+fi
+
+script_dir=${0:A:h}
+fragment="$script_dir/codex-status-line.toml"
+config_path=${1:-${CODEX_HOME:-$HOME/.codex}/config.toml}
+
+desired_status_line=$(sed -n 's/^[[:space:]]*status_line[[:space:]]*=[[:space:]]*//p' "$fragment")
+desired_status_line_use_colors=$(sed -n 's/^[[:space:]]*status_line_use_colors[[:space:]]*=[[:space:]]*//p' "$fragment")
+if [[ -z "$desired_status_line" || -z "$desired_status_line_use_colors" ]]; then
+  print -u2 "codex-status-line-setup: missing status-line settings in $fragment"
+  exit 1
+fi
+
+config_dir=${config_path:h}
+mkdir -p "$config_dir"
+temporary_path=$(mktemp "$config_path.tmp.XXXXXX")
+trap 'rm -f "$temporary_path"' EXIT
+
+if [[ -f "$config_path" ]]; then
+  awk -v desired="$desired_status_line" -v desired_colors="$desired_status_line_use_colors" '
+    function emit_status_line() {
+      print "status_line = " desired
+      replaced_status = 1
+    }
+
+    function emit_status_line_use_colors() {
+      print "status_line_use_colors = " desired_colors
+      replaced_colors = 1
+    }
+
+    BEGIN {
+      in_tui = 0
+      saw_tui = 0
+      replaced_status = 0
+      replaced_colors = 0
+      skipping_multiline = 0
+    }
+
+    {
+      if (skipping_multiline) {
+        if ($0 ~ /]/) {
+          skipping_multiline = 0
+        }
+        next
+      }
+
+      if ($0 ~ /^[[:space:]]*\[[^]]+\][[:space:]]*$/) {
+        if (in_tui) {
+          if (!replaced_status) {
+            emit_status_line()
+          }
+          if (!replaced_colors) {
+            emit_status_line_use_colors()
+          }
+        }
+        in_tui = ($0 ~ /^[[:space:]]*\[tui\][[:space:]]*$/)
+        if (in_tui) {
+          saw_tui = 1
+          replaced_status = 0
+          replaced_colors = 0
+        }
+      }
+
+      if (in_tui && $0 ~ /^[[:space:]]*status_line[[:space:]]*=/) {
+        emit_status_line()
+        if ($0 !~ /]/) {
+          skipping_multiline = 1
+        }
+        next
+      }
+
+      if (in_tui && $0 ~ /^[[:space:]]*status_line_use_colors[[:space:]]*=/) {
+        emit_status_line_use_colors()
+        next
+      }
+
+      print
+    }
+
+    END {
+      if (in_tui) {
+        if (!replaced_status) {
+          emit_status_line()
+        }
+        if (!replaced_colors) {
+          emit_status_line_use_colors()
+        }
+      }
+      if (!saw_tui) {
+        print ""
+        print "[tui]"
+        emit_status_line()
+        emit_status_line_use_colors()
+      }
+    }
+  ' "$config_path" > "$temporary_path"
+else
+  print '[tui]' > "$temporary_path"
+  print "status_line = $desired_status_line" >> "$temporary_path"
+  print "status_line_use_colors = $desired_status_line_use_colors" >> "$temporary_path"
+fi
+
+if [[ -f "$config_path" ]]; then
+  config_mode=$(stat -f '%Lp' "$config_path" 2>/dev/null || stat -c '%a' "$config_path")
+  chmod "$config_mode" "$temporary_path"
+fi
+mv "$temporary_path" "$config_path"
+trap - EXIT

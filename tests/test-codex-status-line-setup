@@ -1,0 +1,51 @@
+#!/bin/zsh
+set -euo pipefail
+
+repo_root=${0:A:h:h}
+setup_command="$repo_root/codex/.local/bin/codex-status-line-setup"
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/codex-status-line-test.XXXXXX")
+trap 'rm -rf "$tmpdir"' EXIT
+
+assert_contains() {
+  local file=$1
+  local expected=$2
+  grep -Fqx "$expected" "$file"
+}
+
+config="$tmpdir/config.toml"
+cat > "$config" <<'EOF'
+model = "machine-specific-model"
+
+[projects."/Users/example"]
+trust_level = "trusted"
+EOF
+
+"$setup_command" "$config"
+assert_contains "$config" 'model = "machine-specific-model"'
+assert_contains "$config" '[projects."/Users/example"]'
+assert_contains "$config" 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "branch-changes", "context-remaining"]'
+assert_contains "$config" 'status_line_use_colors = true'
+
+cat > "$config" <<'EOF'
+model = "machine-specific-model"
+
+[tui]
+status_line = ["current-dir"]
+status_line_use_colors = false
+
+[projects."/Users/example"]
+trust_level = "trusted"
+EOF
+
+"$setup_command" "$config"
+assert_contains "$config" 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "branch-changes", "context-remaining"]'
+assert_contains "$config" 'status_line_use_colors = true'
+! grep -Fqx 'status_line_use_colors = false' "$config"
+assert_contains "$config" 'trust_level = "trusted"'
+
+before=$(<"$config")
+"$setup_command" "$config"
+after=$(<"$config")
+[[ "$before" == "$after" ]]
+
+print 'ok'

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Status Line Setup"
+  short_description: "Apply the shared Codex status line safely across machines"
+  default_prompt: "Set up or refresh the shared Codex status line while preserving machine-specific config settings."
