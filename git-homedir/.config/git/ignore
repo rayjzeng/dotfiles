@@ -1,0 +1,28 @@
+**/.claude/settings.local.json
+
+# macOS metadata
+.DS_Store
+._*
+
+# Linux filesystem and desktop metadata
+.directory
+.nfs*
+.fuse_hidden*
+
+# Editor temporary and backup files
+*.sw?
+*~
+*.un~
+.netrwhist
+.#*
+\#*\#
+
+# Process and crash output
+nohup.out
+core
+core.*
+vgcore.*
+
+# LLVM profiling output
+*.profraw
+*.profdata
