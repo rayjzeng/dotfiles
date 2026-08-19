@@ -284,8 +284,15 @@ export LESS_TERMCAP_ZW=$'\e[u'
 export GROFF_NO_SGR=1
 
 alias g=git
+
+# agentic tools
 alias cl=claude
-cls() { claude --dangerously-skip-permissions; }
+
+alias cx='codex -p default'
+alias cxa='codex -p architect'
+alias cxb='codex -p implement'
+alias cxc='codex -p precise'
+alias cxd='codex -p chore'
 
 # python venv
 function activate() {
