@@ -2,6 +2,9 @@
 	name = Ray Zeng
 	email = zengjray@gmail.com
 
+[core]
+	excludesFile = ~/.config/git/ignore
+
 [alias]
 	st = status
 	l = log --oneline

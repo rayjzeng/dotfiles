@@ -23,6 +23,20 @@ core
 core.*
 vgcore.*
 
+# Work system tooling
+/TAGS
+/tags
+\#*
+*.orig
+*.rej
+cscope.*
+.codemod.bookmark
+GTAGS
+GSYMS
+GPATH
+GRTAGS
+.fbide
+
 # LLVM profiling output
 *.profraw
 *.profdata
