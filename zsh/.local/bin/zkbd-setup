@@ -1,0 +1,44 @@
+#!/bin/bash
+set -euo pipefail
+
+if (( $# > 1 )); then
+  printf '%s\n' 'usage: zkbd-setup [source-bindings]' >&2
+  exit 2
+fi
+
+if ! command -v zsh >/dev/null 2>&1; then
+  printf '%s\n' 'zkbd-setup requires zsh; install zsh before configuring its key bindings.' >&2
+  exit 1
+fi
+
+if [[ -z ${TERM:-} ]]; then
+  printf '%s\n' 'zkbd-setup requires TERM to identify the current terminal.' >&2
+  exit 1
+fi
+
+terminal_suffix=$(zsh -fc 'printf "%s" "${DISPLAY:-$VENDOR-$OSTYPE}"')
+bindings_dir="$HOME/.zkbd"
+current_bindings="$bindings_dir/$TERM-$terminal_suffix"
+
+if (( $# == 1 )); then
+  source_bindings=$1
+else
+  printf '%s\n' "Launching zkbd for $TERM-$terminal_suffix"
+  zsh -ic 'autoload -Uz zkbd && zkbd'
+  source_bindings=$current_bindings
+fi
+
+if [[ ! -f "$source_bindings" ]]; then
+  printf '%s\n' "zkbd-setup: bindings file not found: $source_bindings" >&2
+  exit 1
+fi
+
+mkdir -p "$bindings_dir"
+for terminal in "$TERM" tmux-256color screen-256color; do
+  destination="$bindings_dir/$terminal-$terminal_suffix"
+  if [[ -e "$destination" && "$source_bindings" -ef "$destination" ]]; then
+    continue
+  fi
+  cp -p "$source_bindings" "$destination"
+  printf '%s\n' "Installed $destination"
+done

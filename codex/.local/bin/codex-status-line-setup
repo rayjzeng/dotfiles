@@ -1,23 +1,23 @@
-#!/bin/zsh
+#!/bin/bash
 set -euo pipefail
 
 if (( $# > 1 )); then
-  print -u2 "usage: codex-status-line-setup [config-path]"
+  printf '%s\n' "usage: codex-status-line-setup [config-path]" >&2
   exit 2
 fi
 
-script_dir=${0:A:h}
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 fragment="$script_dir/codex-status-line.toml"
 config_path=${1:-${CODEX_HOME:-$HOME/.codex}/config.toml}
 
 desired_status_line=$(sed -n 's/^[[:space:]]*status_line[[:space:]]*=[[:space:]]*//p' "$fragment")
 desired_status_line_use_colors=$(sed -n 's/^[[:space:]]*status_line_use_colors[[:space:]]*=[[:space:]]*//p' "$fragment")
 if [[ -z "$desired_status_line" || -z "$desired_status_line_use_colors" ]]; then
-  print -u2 "codex-status-line-setup: missing status-line settings in $fragment"
+  printf '%s\n' "codex-status-line-setup: missing status-line settings in $fragment" >&2
   exit 1
 fi
 
-config_dir=${config_path:h}
+config_dir=$(dirname -- "$config_path")
 mkdir -p "$config_dir"
 temporary_path=$(mktemp "$config_path.tmp.XXXXXX")
 trap 'rm -f "$temporary_path"' EXIT
@@ -101,13 +101,17 @@ if [[ -f "$config_path" ]]; then
     }
   ' "$config_path" > "$temporary_path"
 else
-  print '[tui]' > "$temporary_path"
-  print "status_line = $desired_status_line" >> "$temporary_path"
-  print "status_line_use_colors = $desired_status_line_use_colors" >> "$temporary_path"
+  printf '%s\n' '[tui]' > "$temporary_path"
+  printf 'status_line = %s\n' "$desired_status_line" >> "$temporary_path"
+  printf 'status_line_use_colors = %s\n' "$desired_status_line_use_colors" >> "$temporary_path"
 fi
 
 if [[ -f "$config_path" ]]; then
-  config_mode=$(stat -f '%Lp' "$config_path" 2>/dev/null || stat -c '%a' "$config_path")
+  if [[ $(uname -s) == Darwin ]]; then
+    config_mode=$(stat -f '%Lp' "$config_path")
+  else
+    config_mode=$(stat -c '%a' "$config_path")
+  fi
   chmod "$config_mode" "$temporary_path"
 fi
 mv "$temporary_path" "$config_path"

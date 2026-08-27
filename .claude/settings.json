@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PROJECT_DIR}/.agent-hooks/git-homedir-sync-reminder\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

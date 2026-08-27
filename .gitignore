@@ -5,6 +5,7 @@ tmux/.tmux/plugins/*
 
 dependencies/Brewfile.lock.json
 
-# Claude Code - only track skills
+# Claude Code - only track shared settings and skills
 .claude/*
+!.claude/settings.json
 !.claude/skills/

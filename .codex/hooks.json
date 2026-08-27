@@ -1,0 +1,17 @@
+{
+  "description": "Repository maintenance reminders.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"$(git rev-parse --show-toplevel)/.agent-hooks/git-homedir-sync-reminder\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -79,7 +79,7 @@ if [[ -f "$HOME/.zkbd/$TERM-${DISPLAY:-$VENDOR-$OSTYPE}" ]]; then
   source "$HOME/.zkbd/$TERM-${DISPLAY:-$VENDOR-$OSTYPE}"
 else
   echo "WARNING: Keybindings may not be set correctly!"
-  echo "Execute \`zkbd\` to create bindings."
+  echo "Execute \`zkbd-setup\` to create bindings for this terminal, tmux, and screen."
 fi
 
 zmodload zsh/terminfo

@@ -1,0 +1,34 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+setup_command="$script_dir/zkbd-setup"
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/zkbd-setup-test.XXXXXX")
+trap 'rm -rf "$tmpdir"' EXIT
+
+test_home="$tmpdir/home"
+source_bindings="$tmpdir/bindings"
+mkdir -p "$test_home"
+printf '%s\n' 'typeset -gA key' "key[Home]='test'" > "$source_bindings"
+
+HOME="$test_home" TERM=xterm-256color DISPLAY=test-display \
+  "$setup_command" "$source_bindings"
+
+for terminal in xterm-256color tmux-256color screen-256color; do
+  cmp "$source_bindings" "$test_home/.zkbd/$terminal-test-display"
+done
+
+HOME="$test_home" TERM=xterm-256color DISPLAY=test-display \
+  "$setup_command" "$source_bindings"
+
+# VENDOR and OSTYPE are zsh parameters and must expand in the child shell.
+# shellcheck disable=SC2016
+fallback_suffix=$(env -u DISPLAY zsh -fc 'printf "%s" "$VENDOR-$OSTYPE"')
+env -u DISPLAY HOME="$test_home" TERM=vt100 \
+  "$setup_command" "$source_bindings"
+
+for terminal in vt100 tmux-256color screen-256color; do
+  cmp "$source_bindings" "$test_home/.zkbd/$terminal-$fallback_suffix"
+done
+
+printf '%s\n' 'ok'

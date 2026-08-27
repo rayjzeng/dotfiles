@@ -1,0 +1,35 @@
+#!/bin/bash
+set -euo pipefail
+
+hook_input=$(cat)
+if [[ "$hook_input" != *git-homedir* ]]; then
+  exit 0
+fi
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+if [[ -z $(git -C "$repo_root" status --porcelain --untracked-files=all -- git-homedir) ]]; then
+  exit 0
+fi
+
+is_managed_symlink() {
+  local local_path=$1
+  local managed_path=$2
+  [[ -L "$local_path" && -e "$managed_path" && "$local_path" -ef "$managed_path" ]]
+}
+
+gitconfig_is_managed=false
+git_dir_is_managed=false
+
+if is_managed_symlink "$HOME/.gitconfig" "$repo_root/git-homedir/.gitconfig"; then
+  gitconfig_is_managed=true
+fi
+
+if is_managed_symlink "$HOME/.config/git" "$repo_root/git-homedir/.config/git"; then
+  git_dir_is_managed=true
+fi
+
+if [[ "$gitconfig_is_managed" == true && "$git_dir_is_managed" == true ]]; then
+  exit 0
+fi
+
+printf '%s\n' '{"systemMessage":"git-homedir changed, but ~/.gitconfig and/or ~/.config/git use local copies. Manually merge the updated managed files into those local copies before finishing."}'

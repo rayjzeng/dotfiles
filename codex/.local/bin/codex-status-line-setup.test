@@ -1,8 +1,8 @@
-#!/bin/zsh
+#!/bin/bash
 set -euo pipefail
 
-repo_root=${0:A:h:h}
-setup_command="$repo_root/codex/.local/bin/codex-status-line-setup"
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+setup_command="$script_dir/codex-status-line-setup"
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/codex-status-line-test.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -10,6 +10,23 @@ assert_contains() {
   local file=$1
   local expected=$2
   grep -Fqx "$expected" "$file"
+}
+
+assert_not_contains() {
+  local file=$1
+  local unexpected=$2
+  if grep -Fqx "$unexpected" "$file"; then
+    printf '%s\n' "unexpected line in $file: $unexpected" >&2
+    return 1
+  fi
+}
+
+file_mode() {
+  if [[ $(uname -s) == Darwin ]]; then
+    stat -f '%Lp' "$1"
+  else
+    stat -c '%a' "$1"
+  fi
 }
 
 config="$tmpdir/config.toml"
@@ -20,11 +37,13 @@ model = "machine-specific-model"
 trust_level = "trusted"
 EOF
 
+chmod 600 "$config"
 "$setup_command" "$config"
 assert_contains "$config" 'model = "machine-specific-model"'
 assert_contains "$config" '[projects."/Users/example"]'
 assert_contains "$config" 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "branch-changes", "context-remaining"]'
 assert_contains "$config" 'status_line_use_colors = true'
+[[ $(file_mode "$config") == 600 ]]
 
 cat > "$config" <<'EOF'
 model = "machine-specific-model"
@@ -40,7 +59,7 @@ EOF
 "$setup_command" "$config"
 assert_contains "$config" 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "branch-changes", "context-remaining"]'
 assert_contains "$config" 'status_line_use_colors = true'
-! grep -Fqx 'status_line_use_colors = false' "$config"
+assert_not_contains "$config" 'status_line_use_colors = false'
 assert_contains "$config" 'trust_level = "trusted"'
 
 before=$(<"$config")
@@ -48,4 +67,4 @@ before=$(<"$config")
 after=$(<"$config")
 [[ "$before" == "$after" ]]
 
-print 'ok'
+printf '%s\n' 'ok'

@@ -1,0 +1,51 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+hook="$script_dir/git-homedir-sync-reminder"
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/git-homedir-hook-test.XXXXXX")
+trap 'rm -rf "$tmpdir"' EXIT
+
+repo="$tmpdir/repo"
+test_home="$tmpdir/home"
+mkdir -p "$repo/git-homedir/.config/git" "$test_home/.config/git"
+
+printf '%s\n' '[user]' '    name = Managed User' > "$repo/git-homedir/.gitconfig"
+printf '%s\n' '*.profraw' > "$repo/git-homedir/.config/git/ignore"
+
+git -C "$repo" init -q
+git -C "$repo" add git-homedir
+git -C "$repo" -c user.name=Test -c user.email=test@example.com commit -qm baseline
+printf '%s\n' '*.profdata' >> "$repo/git-homedir/.config/git/ignore"
+
+printf '%s\n' '[user]' '    name = Local User' > "$test_home/.gitconfig"
+printf '%s\n' '*.local' > "$test_home/.config/git/ignore"
+
+output=$(
+  cd "$repo"
+  printf '%s\n' '{"tool_input":{"file_path":"git-homedir/.config/git/ignore"}}' |
+    HOME="$test_home" "$hook"
+)
+[[ "$output" == *'"systemMessage"'* ]]
+printf '%s\n' "$output" | jq -e '.systemMessage | length > 0' >/dev/null
+
+output=$(
+  cd "$repo"
+  printf '%s\n' '{"tool_input":{"file_path":"AGENTS.md"}}' |
+    HOME="$test_home" "$hook"
+)
+[[ -z "$output" ]]
+
+rm -f "$test_home/.gitconfig"
+rm -rf "$test_home/.config/git"
+ln -s "$repo/git-homedir/.gitconfig" "$test_home/.gitconfig"
+ln -s "$repo/git-homedir/.config/git" "$test_home/.config/git"
+
+output=$(
+  cd "$repo"
+  printf '%s\n' '{"tool_input":{"file_path":"git-homedir/.gitconfig"}}' |
+    HOME="$test_home" "$hook"
+)
+[[ -z "$output" ]]
+
+printf '%s\n' 'ok'

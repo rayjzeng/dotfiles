@@ -1,9 +1,9 @@
 ---
-name: statusline-setup
+name: claude-status-line-setup
 description: Configure the Claude Code status line setting. Use when the user says "set up status line", "configure status line", "fix my status line", or wants to copy/restore the status line configuration.
 ---
 
-# Status Line Setup
+# Claude Status Line Setup
 
 Configure the Claude Code status line to show working directory, git/sl branch with dirty/staged indicators, model name, and context window usage.
 
