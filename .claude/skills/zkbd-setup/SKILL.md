@@ -10,17 +10,33 @@ equivalent files for the terminal names used by multiplexers.
 
 ## Workflow
 
-1. Confirm `zsh` is installed. If the user's login shell is not zsh, mention
-   that the bindings apply only when zsh runs; do not change the login shell
-   without permission.
+1. Confirm `zsh` is installed and `TERM` is set. If the user's login shell is
+   not zsh, mention that the bindings apply only when zsh runs; do not change
+   the login shell without permission.
 2. From the dotfiles repository, stow the zsh package if needed:
 
    ```sh
    stow zsh
    ```
 
-3. Run the installed helper from the terminal whose key sequences should be
-   captured:
+3. Derive the current binding name and check the current terminal plus both
+   multiplexer variants:
+
+   ```sh
+   terminal_suffix=$(zsh -fc 'printf "%s" "${DISPLAY:-$VENDOR-$OSTYPE}"')
+   current_bindings="$HOME/.zkbd/$TERM-$terminal_suffix"
+   ```
+
+   If the current, `tmux-256color`, and `screen-256color` files all exist,
+   report that zkbd is already configured and stop. If the current binding
+   exists but either variant is missing, reuse it without prompting:
+
+   ```sh
+   zkbd-setup "$current_bindings"
+   ```
+
+4. Only when the current binding is missing, run the installed helper from the
+   terminal whose key sequences should be captured:
 
    ```sh
    zkbd-setup
@@ -32,7 +48,7 @@ equivalent files for the terminal names used by multiplexers.
    `screen-256color` tmux configuration as well as machines using
    `tmux-256color`.
 
-4. Start a new zsh session and confirm the missing-bindings warning is gone.
+5. Start a new zsh session and confirm the missing-bindings warning is gone.
 
 The script accepts an existing bindings file as its only argument when the user
 wants to copy known-good bindings without rerunning the interactive `zkbd`

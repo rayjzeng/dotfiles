@@ -6,9 +6,10 @@ description: Apply or refresh the dotfiles-managed Codex TUI status line across 
 # Codex Status Line Setup
 
 Use the repository’s `codex` Stow package and setup command to apply the shared
-Codex status line. The setup command edits only the managed status-line keys in
-`~/.codex/config.toml`; do not replace the whole file because other settings are
-machine-specific.
+Codex status line. This package contains only status-line tooling; optional task
+profiles live in the separate `codex-profiles` package. The setup command edits
+only the managed status-line keys in `~/.codex/config.toml`; do not replace the
+whole file because other settings are machine-specific.
 
 ## Workflow
 
@@ -18,7 +19,7 @@ machine-specific.
 2. Stow the package so the setup command is available:
 
    ```sh
-   stow codex
+   stow --no-folding codex
    ```
 
 3. Apply the shared configuration:
@@ -36,6 +37,10 @@ machine-specific.
 
 4. Verify that the target `[tui]` section contains the tracked status-line
    settings and that unrelated machine-specific settings are still present.
+
+Do not stow `codex-profiles` unless the user explicitly requests task profiles.
+Meta work environments use the default model for all tasks and should normally
+leave that package unstowed.
 
 ## Managed Settings
 

@@ -1,201 +1,94 @@
 ---
 name: init-dotfiles
-description: Bootstrap a fresh macOS or Linux machine with the rayjzeng/dotfiles repo, including safe Git config integration and installed agent status lines. Use for new-machine setup, SSH setup in this repo, or the full dotfiles installation workflow.
+description: Bootstrap or audit the rayjzeng/dotfiles repo on personal laptops, Meta work laptops, and Meta remote servers while preserving machine-specific configuration.
 ---
 
 # Init Dotfiles
 
-Automate the full setup of the rayjzeng/dotfiles repo on a fresh macOS or Linux machine.
+Set up the dotfiles repository according to the machine's environment. Avoid
+applying laptop, personal, or SSH assumptions to Meta remote servers.
 
-Detect the platform at the start (`uname -s`) and branch accordingly where steps differ.
+## Select the Environment
 
-## Preconditions
+Detect the platform with `uname -s` and inspect `/etc/os-release` on Linux.
+Determine which environment the user is configuring:
 
-Before running this skill, the following should already be installed:
-- **macOS**: Homebrew (`brew`)
-- **Linux**: `git`, `stow`, `curl` (install via system package manager if missing)
-- The dotfiles repo, cloned via HTTPS to `~/dotfiles`
+- **Personal laptop**: read [references/personal-laptop.md](references/personal-laptop.md).
+- **Meta work laptop**: read [references/work-laptop.md](references/work-laptop.md).
+- **Meta remote server** (devserver, OD, or similar): read
+  [references/work-remote.md](references/work-remote.md).
 
-Repository helper scripts use `/bin/bash`. Zsh is required for the interactive
-shell configuration and `zkbd`, but not for running the setup helpers.
+Read only the selected environment reference. Ask the user which environment
+this is when it is not explicit or reliably known. Do not infer that a machine
+is a laptop merely because a WezTerm executable is visible.
 
-## Workflow
+## Shared Workflow
 
-Execute these steps in order. Pause for user input where indicated.
+1. Confirm the repository root and required bootstrap tools. Repository helper
+   scripts use `/bin/bash`; zsh is required only for the interactive shell and
+   zkbd configuration.
+2. Install missing dependencies according to the selected environment. Inspect
+   an existing executable or symlink before replacing it, and verify the
+   expected command name after installation. When Starship is unavailable from
+   the system package manager, use its installer:
 
-### Step 1: GitHub SSH Key Setup
+   ```sh
+   curl -sS https://starship.rs/install.sh | sh
+   ```
+3. Initialize submodules:
 
-Generate an ed25519 SSH key for GitHub and configure the SSH agent.
+   ```sh
+   git submodule init
+   git submodule update --recursive
+   ```
 
-Ask the user for their GitHub email address before proceeding.
+4. Use the `git-homedir-setup` skill for Git. Preserve machine-specific
+   identities, credential helpers, proxies, certificates, includes, URL
+   rewrites, and existing ignore rules. Never use `stow --adopt` for Git.
+5. Preview each applicable package with `stow --simulate --verbose=2` before
+   running Stow:
 
-**macOS:**
+   ```sh
+   stow tmux
+   stow zsh
+   stow vim
+   stow starship
+   ```
 
-```sh
-eval "$(ssh-agent -s)"
-ssh-keygen -t ed25519 -C "<user-email>"
-ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+   If Stow rejects an absolute symlink that resolves to the exact managed
+   source, replace only that symlink and rerun Stow so it creates its normal
+   relative link. Stop on any other conflict. The `vim` package also provides
+   the Neovim entry point through links back to `nvim/`.
+6. Configure only installed agent harnesses:
+   - For Claude Code, ensure `jq` is installed and use the
+     `claude-status-line-setup` skill. Preserve unrelated settings.
+   - For Codex, use the `codex-status-line-setup` skill. The `codex` package
+     contains shared status-line tooling only. The optional `codex-profiles`
+     package is selected by the environment reference.
+7. Apply WezTerm configuration only when the selected environment enables it.
+   Before stowing, create `~/.config/wezterm` and use
+   `stow --no-folding wezterm` so the downloaded `wezterm.sh` stays outside the
+   repository. Then install the shell integration:
 
-cat << 'EOF' > ~/.ssh/config
-Host github.com
-  AddKeysToAgent yes
-  UseKeychain yes
-  IdentityFile ~/.ssh/id_ed25519
-EOF
-```
+   ```sh
+   curl -o ~/.config/wezterm/wezterm.sh https://raw.githubusercontent.com/wez/wezterm/main/assets/shell-integration/wezterm.sh
+   ```
+8. Use the `zkbd-setup` skill. Reuse existing bindings when possible and avoid
+   launching interactive `zkbd` when all required variants already exist.
+9. Install Vim plugins with `vim +PlugInstall +qall` when they are absent.
 
-**Linux:**
+## Verification
 
-```sh
-eval "$(ssh-agent -s)"
-ssh-keygen -t ed25519 -C "<user-email>"
-ssh-add ~/.ssh/id_ed25519
+Report only checks applicable to the selected environment:
 
-cat << 'EOF' > ~/.ssh/config
-Host github.com
-  AddKeysToAgent yes
-  IdentityFile ~/.ssh/id_ed25519
-EOF
-```
+- managed tmux, zsh, Vim, Starship, and selected Codex links resolve into the
+  repository;
+- Git uses either managed symlinks or verified local copies, and the global
+  excludes file is active;
+- required commands are installed, including `fd`, `jq`, and `starship`;
+- installed agent harnesses have their managed status line;
+- current-terminal, `tmux-256color`, and `screen-256color` zkbd files exist;
+- Vim plugins are installed;
+- SSH and WezTerm checks appear only when enabled for the environment.
 
-After generating the key, print the public key (`cat ~/.ssh/id_ed25519.pub`) and tell the user to add it to their GitHub account at https://github.com/settings/ssh/new. Wait for them to confirm before continuing.
-
-### Step 2: Switch Repo Remote to SSH
-
-Once the user confirms the SSH key is added to GitHub:
-
-```sh
-cd ~/dotfiles
-git remote set-url origin git@github.com:rayjzeng/dotfiles.git
-```
-
-Verify with `git remote -v` and `ssh -T git@github.com` (the latter should show "successfully authenticated").
-
-### Step 3: Init Git Submodules
-
-The repo uses submodules for zsh plugins and a vim plugin fork:
-
-```sh
-cd ~/dotfiles
-git submodule init
-git submodule update --recursive
-```
-
-### Step 4: Install Dependencies
-
-**macOS:**
-
-Ask whether to use the personal or work profile:
-- **Personal**: `brew bundle install --file=dependencies/Brewfile`
-- **Work**: `brew bundle install --file=dependencies/work/Brewfile`
-
-Both Brewfiles include `fd`, `jq`, and starship.
-
-**Linux:**
-
-Install core dependencies via the system package manager (apt, dnf, etc.):
-- `fd-find` (or `fd`), `fzf`, `jq`, `ripgrep`, `stow`, `tmux`, `vim`, `zoxide`, `zsh`
-
-On Debian and Ubuntu, `fd-find` installs the executable as `fdfind`. If `fd` is
-missing but `fdfind` exists, expose the name used by `.zshrc`:
-
-```sh
-mkdir -p "$HOME/.local/bin"
-ln -s "$(command -v fdfind)" "$HOME/.local/bin/fd"
-```
-
-Inspect an existing `~/.local/bin/fd` instead of overwriting it.
-
-Then install starship (not available in most distro repos):
-
-```sh
-curl -sS https://starship.rs/install.sh | sh
-```
-
-After installing dependencies, tell the user if zsh is still unavailable. If
-zsh is installed but is not the current login shell, suggest
-`chsh -s "$(command -v zsh)"` and explain that a new login session is required.
-Do not change the login shell without confirmation.
-
-### Step 5: Stow Packages
-
-Create symlinks from the repo into `$HOME`. Run from `~/dotfiles`:
-
-```sh
-cd ~/dotfiles
-stow tmux
-stow zsh
-stow vim
-stow starship
-```
-
-Use the `git-homedir-setup` skill for the Git package. A machine may already
-have identities, credential helpers, proxies, conditional includes, or other
-settings in `~/.gitconfig`; preserve them and merge the managed config into
-local copies instead of blindly replacing the file. Never use
-`stow --adopt` for this merge.
-
-If WezTerm is installed, stow it on either macOS or Linux. Pre-create the target
-directory and disable directory folding so the downloaded shell integration
-does not get written back into the repository:
-
-```sh
-mkdir -p "$HOME/.config/wezterm"
-stow --no-folding wezterm
-```
-
-Note: The `vim` package contains symlinks that point back to `nvim/`, so stowing `vim` alone is sufficient for both vim and neovim config.
-
-### Step 6: Configure Installed Agent Status Lines
-
-Detect which supported agent harnesses are installed and configure only those
-the user uses:
-
-- For Claude Code, ensure `jq` is installed and use the
-  `claude-status-line-setup` skill. Preserve unrelated settings in
-  `~/.claude/settings.json`.
-- For Codex, use the `codex-status-line-setup` skill. It stows the `codex`
-  package and updates only the managed `[tui]` keys in
-  `~/.codex/config.toml`.
-
-If neither harness is installed, skip this step. Do not create tool-specific
-configuration unless the user asks for it.
-
-### Step 7: WezTerm Shell Integration
-
-If WezTerm is installed, download its shell integration script to enable
-scroll-to-prompt and CWD tracking:
-
-```sh
-curl -o ~/.config/wezterm/wezterm.sh https://raw.githubusercontent.com/wez/wezterm/main/assets/shell-integration/wezterm.sh
-```
-
-The `.zshrc` already sources this file if it exists. Skip this step when WezTerm
-is not installed.
-
-### Step 8: Post-Install
-
-These steps require manual interaction or a new shell session:
-
-1. **zkbd**: Use the `zkbd-setup` skill to generate bindings for the current
-   terminal and install matching `tmux-256color` and `screen-256color` copies.
-2. **Vim plugins**: Run `vim +PlugInstall +qall`
-
-## Summary Checklist
-
-Print this at the end so the user can verify:
-
-- [ ] `~/.ssh/id_ed25519` exists and is added to GitHub
-- [ ] `git remote -v` shows `git@github.com:rayjzeng/dotfiles.git`
-- [ ] `~/.tmux.conf` symlinks to dotfiles
-- [ ] `~/.zshrc` symlinks to dotfiles
-- [ ] `~/.vimrc` symlinks to dotfiles
-- [ ] `~/.gitconfig` is a managed symlink or synchronized local copy
-- [ ] `~/.config/git/ignore` is a managed symlink or synchronized local copy and is Git's active global excludes file
-- [ ] `~/.config/starship.toml` symlinks to dotfiles
-- [ ] `starship` is installed (`starship --version`)
-- [ ] `~/.config/wezterm/wezterm.lua` symlinks to dotfiles (when WezTerm is installed)
-- [ ] `~/.config/wezterm/wezterm.sh` exists (when WezTerm is installed)
-- [ ] Installed agent harnesses have their managed status line configured
-- [ ] zkbd bindings exist for the current terminal, `tmux-256color`, and `screen-256color`
-- [ ] Vim plugins are installed
+Report intentionally skipped components as skipped, not missing.
