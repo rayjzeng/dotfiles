@@ -1,0 +1,458 @@
+local wezterm = require 'wezterm'
+local menu = {}
+local prefix = 'devservers:'
+
+local function get_pane(id)
+  if not id then return nil end
+  local ok, pane = pcall(wezterm.mux.get_pane, id)
+  return ok and pane or nil
+end
+
+local function get_window(id)
+  if not id then return nil end
+  local ok, window = pcall(wezterm.mux.get_window, id)
+  return ok and window or nil
+end
+
+local function is_bar(pane)
+  return pane:get_user_vars().DEVVM_MENU == '1' or wezterm.GLOBAL['domain_menu_role_' .. pane:pane_id()] == true
+end
+
+local function content_pane(tab)
+  local last = get_pane(wezterm.GLOBAL['domain_content_' .. tab:tab_id()])
+  for _, pane in ipairs(tab:panes()) do
+    if not is_bar(pane) then
+      if last and pane:pane_id() == last:pane_id() then return pane end
+    end
+  end
+  for _, pane in ipairs(tab:panes()) do
+    if not is_bar(pane) then return pane end
+  end
+end
+
+local function focus(window, on_ready)
+  local gui_windows = wezterm.gui.gui_windows()
+  local origin, bring_to_front
+  for _, gui in ipairs(gui_windows) do
+    local ok, focused = pcall(function() return gui:is_focused() end)
+    if ok then
+      origin = origin or gui
+      if focused then origin = gui; bring_to_front = true; break end
+    end
+  end
+  if origin then
+    origin:perform_action(wezterm.action.SwitchToWorkspace { name = window:get_workspace() }, origin:active_pane())
+  end
+  local function show(attempt)
+    local ok, gui = pcall(function() return window:gui_window() end)
+    if ok and gui then
+      local tab = window:active_tab()
+      local pane = tab and content_pane(tab)
+      if pane then pane:activate() end
+      local width, height = wezterm.GLOBAL.domain_width, wezterm.GLOBAL.domain_height
+      if width and height then gui:set_inner_size(width, height) end
+      if bring_to_front then gui:focus() end
+      if on_ready then on_ready(gui) end
+    elseif attempt < 20 then
+      wezterm.time.call_after(0.05, function() show(attempt + 1) end)
+    end
+  end
+  show(0)
+end
+
+function menu.decorate_tab(tab, fallback)
+  if tab.tab_title and tab.tab_title ~= '' then return tab.tab_title end
+  local ok, live = pcall(wezterm.mux.get_tab, tab.tab_id)
+  local pane = ok and live and content_pane(live)
+  return pane and pane:get_title() or fallback
+end
+
+function menu.apply_to_config(config, context)
+  local cfg = context.config_dir
+  local helper = context.helper
+  local hosts, by_name, by_domain = context.hosts, context.by_name, context.by_domain
+  local f = assert(io.open(cfg .. '/domain-menu.sh', 'r'))
+  local bar_program = f:read('*a'); f:close()
+  config.default_workspace = prefix .. 'local'
+  wezterm.GLOBAL.domain_poll_owner = (wezterm.GLOBAL.domain_poll_owner or 0) + 1
+  local poll_owner = wezterm.GLOBAL.domain_poll_owner
+  local poll, poll_started
+
+  local function window_host(window)
+    local host, has_local, has_content
+    for _, tab in ipairs(window:tabs()) do
+      local pane = content_pane(tab)
+      if pane then
+        local vars = pane:get_user_vars()
+        local candidate = by_domain[pane:get_domain_name()]
+        if vars.DEVVM_TRANSIENT ~= '1' and vars.DEVVM_REQUEST == nil then
+          has_content = true
+          if not candidate and pane:get_domain_name() ~= 'local' then return nil, false end
+          if candidate then
+            if host and host ~= candidate then return nil, false end
+            host = candidate
+          else has_local = true end
+        end
+      end
+    end
+    return host, has_content and not (host and has_local)
+  end
+
+  local function local_window(control)
+    local window = get_window(wezterm.GLOBAL.domain_local_window)
+    if not window then
+      for _, candidate in ipairs(wezterm.mux.all_windows()) do
+        local host, valid = window_host(candidate)
+        if valid and not host and candidate:get_workspace() ~= 'devservers-stale' then
+          window = candidate; break
+        end
+      end
+    end
+    if not window then
+      local _, _, created = wezterm.mux.spawn_window { domain = { DomainName = 'local' }, workspace = prefix .. 'local' }
+      window = created
+    end
+    wezterm.GLOBAL.domain_local_window = window:window_id()
+    if control and #window:tabs() == 1 and window:active_pane():pane_id() == control:pane_id() then
+      window:spawn_tab { domain = { DomainName = 'local' } }
+    end
+    return window
+  end
+
+  local function stop_bars(host)
+    for _, window in ipairs(wezterm.mux.all_windows()) do
+      for _, tab in ipairs(window:tabs()) do
+        for _, pane in ipairs(tab:panes()) do
+          if is_bar(pane) and (not host or by_domain[pane:get_domain_name()] == host) then
+            pane:send_text('\nDEVVM_MENU_EXIT\n')
+          end
+        end
+      end
+    end
+  end
+
+  local function existing_host_window(host)
+    local remembered = get_window(wezterm.GLOBAL['domain_window_' .. host.short])
+    if remembered then
+      local owner, valid = window_host(remembered)
+      if valid and owner == host then return remembered end
+    end
+    local best
+    for _, window in ipairs(wezterm.mux.all_windows()) do
+      local owner, valid = window_host(window)
+      if valid and owner == host and window:get_workspace() ~= 'devservers-stale'
+        and (not best or #window:tabs() > #best:tabs()) then best = window end
+    end
+    if best then wezterm.GLOBAL['domain_window_' .. host.short] = best:window_id() end
+    return best
+  end
+
+  local function host_window(host)
+    local remembered = existing_host_window(host)
+    if remembered then return remembered end
+    local next_domain = host.domain == host.domains[1] and host.domains[2] or host.domains[1]
+    local domain = assert(wezterm.mux.get_domain(next_domain), 'restart WezTerm to register ' .. host.label)
+    stop_bars(host)
+    local old = wezterm.mux.get_domain(host.domain)
+    if old and old:state() == 'Attached' then old:detach() end
+    local ok, _, stderr = wezterm.run_child_process { '/bin/bash', helper, '--group', host.name }
+    assert(ok, host.label .. ': ' .. stderr)
+    host.domain = next_domain
+    wezterm.GLOBAL['devservers_domain_' .. host.short] = host.domain
+    domain:attach()
+    local best, size
+    for _, window in ipairs(wezterm.mux.all_windows()) do
+      local candidate, valid = window_host(window)
+      if valid and candidate == host and (not size or #window:tabs() > size) then
+        best, size = window, #window:tabs()
+      end
+    end
+    if not best then
+      local _, _, created = wezterm.mux.spawn_window { domain = { DomainName = host.domain }, workspace = prefix .. host.short }
+      best = created
+    end
+    for _, window in ipairs(wezterm.mux.all_windows()) do
+      local candidate, valid = window_host(window)
+      if valid and candidate == host then
+        window:set_workspace(prefix .. host.short)
+      elseif not valid then
+        for _, tab in ipairs(window:tabs()) do
+          if not content_pane(tab) then
+            for _, pane in ipairs(tab:panes()) do if is_bar(pane) then pane:send_text('\nDEVVM_MENU_EXIT\n') end end
+          end
+        end
+      end
+    end
+    best:set_workspace(prefix .. host.short)
+    wezterm.GLOBAL['domain_window_' .. host.short] = best:window_id()
+    return best
+  end
+
+  local function launch(name)
+    local destination = local_window()
+    focus(destination, function(gui)
+      local content = content_pane(destination:active_tab())
+      if not content then return end
+      content:activate()
+      gui:perform_action(wezterm.action.SpawnCommandInNewTab {
+        domain = { DomainName = 'local' },
+        args = { '/bin/bash', helper, '--progress', name },
+      }, content)
+    end)
+  end
+
+  local function activate(name)
+    if name == 'local' then focus(local_window()); return end
+    local host = by_name[name]
+    if not host then return end
+    local existing = existing_host_window(host)
+    if existing then focus(existing) else launch(name) end
+  end
+  function menu.activate(window, pane, name)
+    local bar = is_bar(pane) and pane or get_pane(wezterm.GLOBAL['domain_bar_' .. window:active_tab():tab_id()])
+    if bar then bar:send_text('\nDEVVM_PICK ' .. name .. '\n') else activate(name) end
+  end
+
+  local function tab_count(window)
+    if not window then return 0 end
+    local count = 0
+    for _, tab in ipairs(window:tabs()) do
+      local pane = content_pane(tab)
+      if pane and pane:get_user_vars().DEVVM_TRANSIENT ~= '1' then count = count + 1 end
+    end
+    return count
+  end
+
+  local function frame(window, columns)
+    local current = window_host(window)
+    local items = { { name = 'local', label = 'Local', connected = true,
+      count = tab_count(get_window(wezterm.GLOBAL.domain_local_window)), selected = not current } }
+    for _, host in ipairs(hosts) do
+      local domain = wezterm.mux.get_domain(host.domain)
+      table.insert(items, { name = host.name, label = host.label,
+        connected = domain and domain:state() == 'Attached',
+        count = tab_count(get_window(wezterm.GLOBAL['domain_window_' .. host.short])), selected = current == host })
+    end
+    local text = {}
+    local remaining = math.max(columns - 1, 0)
+    for _, item in ipairs(items) do
+      if remaining <= 0 then break end
+      local style = item.selected and '\27[48;2;189;147;249m\27[38;2;40;42;54m' or '\27[48;2;40;42;54m\27[38;2;248;248;242m'
+      local label = ' ' .. item.label .. (item.connected and ' ● ' or ' ○ ') .. item.count .. ' '
+      label = wezterm.truncate_right(label, remaining)
+      table.insert(text, '\27]8;;devvm://' .. item.name .. '\7' .. style .. label .. '\27]8;;\7\27[0m')
+      remaining = remaining - wezterm.column_width(label) - 1
+    end
+    return table.concat(text, ' ')
+  end
+
+  local function clean_closed_tabs()
+    for _, candidate in ipairs(wezterm.mux.all_windows()) do
+      for _, tab in ipairs(candidate:tabs()) do
+        if not content_pane(tab) then
+          for _, member in ipairs(tab:panes()) do if is_bar(member) then member:send_text('\nDEVVM_MENU_EXIT\n') end end
+        end
+      end
+    end
+  end
+
+  local function update(window, pane)
+    local enabled = io.open(cfg .. '/domain-menu', 'r')
+    if not enabled then return end
+    enabled:close()
+    if not poll_started then poll_started = true; wezterm.time.call_after(1, poll) end
+    clean_closed_tabs()
+    local live, focused = pcall(function() return window:is_focused() end)
+    if not live then return end
+    if focused or not wezterm.GLOBAL.domain_width then
+      local ok, dimensions = pcall(function() return window:get_dimensions() end)
+      if not ok then return end
+      wezterm.GLOBAL.domain_width, wezterm.GLOBAL.domain_height = dimensions.pixel_width, dimensions.pixel_height
+    end
+    local mux_window = window:mux_window()
+    local host, valid = window_host(mux_window)
+    local tab = window:active_tab()
+    local transient = false
+    for _, member in ipairs(tab:panes()) do
+      local vars = member:get_user_vars()
+      if not is_bar(member) then
+        transient = transient or vars.DEVVM_TRANSIENT == '1' or vars.DEVVM_REQUEST ~= nil
+      end
+    end
+    local bar
+    for _, member in ipairs(tab:panes()) do if is_bar(member) then bar = member; break end end
+    bar = bar or get_pane(wezterm.GLOBAL['domain_bar_' .. tab:tab_id()])
+    local content = content_pane(tab)
+    if transient or not content then
+      if bar then bar:send_text('\nDEVVM_MENU_EXIT\n') end
+      return
+    end
+    if not valid then return end
+    if bar then
+      local dimensions = bar:get_dimensions()
+      local allocation
+      for _, info in ipairs(tab:panes_with_info()) do if info.pane:pane_id() == bar:pane_id() then allocation = info end end
+      if not allocation or allocation.width ~= tab:get_size().cols or allocation.height ~= 1 or allocation.left ~= 0
+        or dimensions.cols ~= tab:get_size().cols or dimensions.viewport_rows ~= 1
+        or wezterm.GLOBAL['domain_bar_code_' .. bar:pane_id()] ~= bar_program then
+        -- Rebuild only the owned menu; content panes survive a damaged footer or
+        -- a script update, including shells accidentally split beside the menu.
+        bar:send_text('\nDEVVM_MENU_EXIT\n')
+        return
+      end
+    end
+    if not is_bar(pane) then wezterm.GLOBAL['domain_content_' .. tab:tab_id()] = pane:pane_id() end
+    if not host and (focused or not wezterm.GLOBAL.domain_local_window) then
+      wezterm.GLOBAL.domain_local_window = mux_window:window_id()
+    end
+    if not bar then
+      bar = content:split { direction = 'Bottom', top_level = true, size = 1,
+        domain = { DomainName = content:get_domain_name() }, args = { '/bin/bash', '-c', bar_program } }
+      wezterm.GLOBAL['domain_bar_' .. tab:tab_id()] = bar:pane_id()
+      wezterm.GLOBAL['domain_menu_role_' .. bar:pane_id()] = true
+      wezterm.GLOBAL['domain_bar_code_' .. bar:pane_id()] = bar_program
+      content:activate()
+    end
+    local dimensions = bar:get_dimensions()
+    dimensions = bar:get_dimensions()
+    local text = frame(mux_window, dimensions.cols)
+    local cache = 'domain_frame_' .. bar:pane_id()
+    local key = text .. ':' .. dimensions.cols
+    if bar:get_user_vars().DEVVM_MENU == '1' and wezterm.GLOBAL[cache] ~= key then
+      bar:send_text('\nDEVVM_DRAW ' .. text .. '\n')
+      wezterm.GLOBAL[cache] = key
+    end
+  end
+
+  poll = function()
+    if wezterm.GLOBAL.domain_poll_owner ~= poll_owner then return end
+    local enabled = io.open(cfg .. '/domain-menu', 'r')
+    if not enabled then return end
+    enabled:close()
+    clean_closed_tabs()
+    for _, window in ipairs(wezterm.gui.gui_windows()) do
+      local ok, err = pcall(function() update(window, window:active_pane()) end)
+      if not ok and not tostring(err):find('closed channel', 1, true) then wezterm.log_error(err) end
+    end
+    wezterm.time.call_after(1, poll)
+  end
+
+  local function execute(request, control)
+    local messages, errors = {}, {}
+    local local_main = local_window(control)
+    if request.action == 'local' then focus(local_main); return { messages = { 'Local domain' }, errors = {} } end
+    if request.action == 'menu-off' then
+      os.remove(cfg .. '/domain-menu')
+      stop_bars()
+      return { messages = { 'Domain menu disabled' }, errors = {} }
+    end
+    local active_workspace = wezterm.mux.get_active_workspace()
+    local selected
+    for _, name in ipairs(request.hosts) do
+      local ok, result = pcall(function()
+        local host = assert(by_name[name], 'unconfigured host: ' .. name)
+        local window = host_window(host)
+        if request.action == 'detach' then
+          window:set_workspace(active_workspace)
+          wezterm.GLOBAL['domain_detached_' .. host.short] = true
+        elseif request.action == 'merge' then
+          window:set_workspace(prefix .. host.short)
+          wezterm.GLOBAL['domain_detached_' .. host.short] = nil
+        end
+        selected = window
+        return host.label .. ': ' .. request.action
+      end)
+      if ok then table.insert(messages, result) else table.insert(errors, tostring(result)) end
+    end
+    if request.action == 'merge' then
+      local previous
+      for _, window in ipairs(wezterm.mux.all_windows()) do
+        if window:get_workspace() == active_workspace then previous = window; break end
+      end
+      focus(previous or local_main)
+    elseif selected then focus(selected) end
+    return { messages = messages, errors = errors }
+  end
+
+  wezterm.on('user-var-changed', function(window, pane, name, path)
+    if name == 'DEVVM_MENU' and path == '1' then update(window, pane); return end
+    if name == 'DEVVM_PICK' and is_bar(pane) then activate(path); return end
+    if name ~= 'DEVVM_REQUEST' or (pane:get_domain_name() ~= 'local' and not is_bar(pane)) then return end
+    local root = context.state_dir .. '/requests/'
+    if path:sub(1, #root) ~= root or path:find('/%.%./') then return end
+    local ok, reply = pcall(function()
+      local input = io.open(path, 'r')
+      if not input then return nil end
+      local request = wezterm.json_parse(input:read('*a')); input:close()
+      assert(request.action == 'open' or request.action == 'merge' or request.action == 'detach'
+        or request.action == 'local' or request.action == 'menu-off', 'invalid domain action')
+      return execute(request, pane)
+    end)
+    if ok and not reply then return end
+    if not ok then reply = { messages = {}, errors = { tostring(reply) } } end
+    local output = assert(io.open(path .. '.result.tmp', 'w'))
+    output:write(wezterm.json_encode(reply)); output:close()
+    os.rename(path .. '.result.tmp', path .. '.result')
+  end)
+  wezterm.on('update-status', update)
+  wezterm.on('window-resized', function(window)
+    local live, dimensions = pcall(function() return window:get_dimensions() end)
+    if not live then return end
+    wezterm.GLOBAL.domain_width, wezterm.GLOBAL.domain_height = dimensions.pixel_width, dimensions.pixel_height
+    local ok, tab = pcall(function() return window:active_tab() end)
+    if not ok or not tab then return end
+    local id = wezterm.GLOBAL['domain_bar_' .. tab:tab_id()]
+    if id then wezterm.GLOBAL['domain_frame_' .. id] = nil end
+    update(window, window:active_pane())
+  end)
+  wezterm.on('open-uri', function(window, pane, uri)
+    local name = uri:match('^devvm://(.+)$')
+    if name then menu.activate(window, pane, name); return false end
+  end)
+  table.insert(config.mouse_bindings, { event = { Up = { streak = 1, button = 'Left' } }, mods = 'NONE',
+    action = wezterm.action_callback(function(window, pane)
+      if is_bar(pane) then
+        window:perform_action(wezterm.action.OpenLinkAtMouseCursor, pane)
+        wezterm.time.call_after(0, function()
+          if window:is_focused() and is_bar(window:active_pane()) then
+            local content = content_pane(window:active_tab())
+            if content then content:activate() end
+          end
+        end)
+      else window:perform_action(wezterm.action.CompleteSelection 'PrimarySelection', pane) end
+    end),
+  })
+  table.insert(config.keys, { key = '0', mods = 'CMD|OPT', action = wezterm.action_callback(function() focus(local_window()) end) })
+  local directions = { ['CMD:['] = 'Prev', ['CMD:]'] = 'Next',
+    ['CMD|SHIFT:LeftArrow'] = 'Left', ['CMD|SHIFT:RightArrow'] = 'Right',
+    ['CMD|SHIFT:UpArrow'] = 'Up', ['CMD|SHIFT:DownArrow'] = 'Down' }
+  local splits = { ['CMD:d'] = 'Right', ['CMD|SHIFT:d'] = 'Bottom', ['CMD|SHIFT:D'] = 'Bottom' }
+  for _, binding in ipairs(config.keys) do
+    local split_direction = splits[binding.mods .. ':' .. binding.key]
+    if split_direction then
+      binding.action = wezterm.action_callback(function(window, pane)
+        local content = is_bar(pane) and content_pane(window:active_tab()) or pane
+        if not content then return end
+        local child = content:split { direction = split_direction,
+          domain = { DomainName = content:get_domain_name() } }
+        wezterm.GLOBAL['domain_content_' .. window:active_tab():tab_id()] = child:pane_id()
+        child:activate()
+      end)
+    end
+    local direction = directions[binding.mods .. ':' .. binding.key]
+    if direction then
+      binding.action = wezterm.action_callback(function(window, pane)
+        local original = is_bar(pane) and content_pane(window:active_tab()) or pane
+        if original then original:activate() end
+        for _ = 1, #window:active_tab():panes() do
+          window:perform_action(wezterm.action.ActivatePaneDirection(direction), window:active_pane())
+          if not is_bar(window:active_pane()) then return end
+          if direction ~= 'Next' and direction ~= 'Prev' then break end
+        end
+        if original then original:activate() end
+      end)
+    end
+  end
+end
+
+return menu

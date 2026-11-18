@@ -1,0 +1,296 @@
+#!/bin/bash
+set -euo pipefail
+
+config_dir=${DEVVM_CONFIG_DIR:-"$HOME/.config/wezterm"}
+socket_dir=${DEVVM_SOCKET_DIR:-"$HOME/.local/share/wezterm-devservers"}
+state_dir=${DEVVM_STATE_DIR:-"$HOME/.local/state/wezterm-devservers"}
+host_file="$config_dir/devservers"
+ek=${DEVVM_EK:-ek}
+wezterm=${DEVVM_WEZTERM:-wezterm}
+script_path=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")
+lock_held=false
+if [[ ${1:-} == --locked ]]; then lock_held=true; shift; fi
+if ! "$lock_held"; then unset DEVVM_PREPARED_HOSTS DEVVM_PREPARED_FAILURE; fi
+die() { printf 'devvm: %s\n' "$*" >&2; exit 1; }
+
+hosts() {
+  python3 - "$host_file" "$@" <<'PY'
+import re, sys
+from pathlib import Path
+
+path, operation, *args = sys.argv[1:]
+path = Path(path)
+if not path.is_file():
+    sys.exit('devvm: no host list; run devvm init first')
+lines = path.read_text().splitlines(keepends=True)
+rows = []
+names, aliases = set(), set()
+reserved = {'all', 'init', 'ls', 'list', 'add', 'rm', 'open', 'detach', 'merge', 'help', 'local', 'menu'}
+for line in lines:
+    fields = line.split('#', 1)[0].split()
+    if not fields:
+        continue
+    if len(fields) > 2 or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]*', fields[0]):
+        sys.exit(f'devvm: invalid host entry: {line.strip()}')
+    host, alias = fields[0], fields[1] if len(fields) == 2 else ''
+    short = host.split('.')[0]
+    if short in names or (alias and alias in aliases):
+        sys.exit(f'devvm: duplicate hostname or alias: {line.strip()}')
+    if alias and (alias in reserved or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', alias)):
+        sys.exit(f'devvm: invalid alias: {alias}')
+    names.add(short)
+    if alias:
+        aliases.add(alias)
+    rows.append((host, alias))
+
+def resolve(selector):
+    exact = [row for row in rows if selector in (row[0], row[1], row[0].split('.')[0])]
+    matches = exact or [row for row in rows if selector in row[0]]
+    if not matches:
+        sys.exit(f'devvm: no host matching {selector!r}; run devvm ls')
+    if len(matches) != 1:
+        sys.exit(f'devvm: ambiguous host {selector!r}: ' + ', '.join(row[0] for row in matches))
+    return matches[0][0]
+
+if operation == 'list':
+    for host, alias in rows:
+        print(f'{host}\t{alias}')
+elif operation == 'resolve':
+    if not args or args[0] == 'all':
+        for host, _ in rows:
+            print(host)
+    else:
+        print(resolve(args[0]))
+elif operation == 'add':
+    host, alias = args[0], args[1] if len(args) > 1 else ''
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]*', host):
+        sys.exit('devvm: invalid hostname')
+    if host.split('.')[0] in names:
+        sys.exit('devvm: hostname already configured (short names must be unique)')
+    if alias and (alias in aliases or alias in reserved or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', alias)):
+        sys.exit('devvm: alias invalid or already configured')
+    original = ''.join(lines)
+    path.write_text(original + ('\n' if original and not original.endswith('\n') else '') + host + (f' {alias}' if alias else '') + '\n')
+elif operation == 'rm':
+    host = resolve(args[0])
+    path.write_text(''.join(line for line in lines if not line.split() or line.split()[0] != host))
+PY
+}
+
+clean_remote_menus() {
+  python3 - "$wezterm" "$1" <<'MENUS'
+import json, os, subprocess, sys, time
+command = [sys.argv[1], "-n", "cli", "--no-auto-start"]
+env = dict(os.environ, WEZTERM_UNIX_SOCKET=sys.argv[2])
+env.pop("WEZTERM_PANE", None)
+
+def cli(*args):
+    return subprocess.run(command + list(args), env=env, text=True, capture_output=True, timeout=10)
+
+def rows():
+    result = cli("list", "--format", "json")
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip())
+    return json.loads(result.stdout)
+
+try:
+    for row in rows():
+        if row["title"] != "dotfiles-domain-menu":
+            continue
+        result = cli("send-text", "--pane-id", str(row["pane_id"]), "--no-paste", "\nDEVVM_MENU_EXIT\n")
+        if result.returncode and any(p["pane_id"] == row["pane_id"] for p in rows()):
+            raise RuntimeError(result.stderr.strip())
+    deadline = time.monotonic() + 5
+    while any(row["title"] == "dotfiles-domain-menu" for row in rows()):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("legacy menu did not exit")
+        time.sleep(0.1)
+except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+    sys.exit("devvm: legacy menu cleanup failed: " + str(error))
+MENUS
+}
+
+ensure_host() {
+  local host=$1 short=${1%%.*} status forward remote
+  command -v "$ek" >/dev/null || die 'Enkaku is missing (ek)'
+  mkdir -p "$socket_dir"
+  if [[ -e "$socket_dir/$short.sock" && ! -L "$socket_dir/$short.sock" ]]; then
+    printf 'devvm: refusing to replace %s\n' "$socket_dir/$short.sock" >&2
+    return 1
+  fi
+  status=$("$ek" status)
+  if ! python3 -c 'import json,sys; cs=json.load(sys.stdin)["status"]["daemon_status"]["connections"]; sys.exit(not any(c.get("hostname")==sys.argv[1] for c in cs.values()))' "$host" <<<"$status"; then
+    printf 'Connecting %s (approve authentication if prompted)\n' "$host" >&2
+    "$ek" connect "$host" || return 1
+    status=$("$ek" status)
+  fi
+  forward=$(python3 -c '
+import json,re,sys
+for c in json.load(sys.stdin)["status"]["daemon_status"]["connections"].values():
+    if c.get("hostname") == sys.argv[1]:
+        for f in (c.get("outbound_udses") or {}).values():
+            if re.fullmatch(r"/run/user/\d+/wezterm/sock", f.get("dst_socket_path", "")):
+                print(f["src_socket_path"]); sys.exit(0)
+' "$host" <<<"$status")
+  if [[ -z "$forward" || ! -S "$forward" ]]; then
+    remote=$("$ek" run -s "$host" -- '
+      export XDG_RUNTIME_DIR=/run/user/$(id -u)
+      p=$XDG_RUNTIME_DIR/wezterm/sock
+      if [ ! -S "$p" ]; then
+        command -v wezterm-mux-server >/dev/null || exit 3
+        wezterm-mux-server --daemonize
+        for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$p" ] && break; sleep 0.5; done
+      fi
+      [ -S "$p" ] && echo "$p"') || return 1
+    [[ -n "$remote" ]] || { printf 'devvm: no mux socket on %s\n' "$host" >&2; return 1; }
+    forward=$("$ek" forward-uds "$remote" "WezTerm devserver $short" "$host" |
+      python3 -c 'import json,sys; s=sys.stdin.read(); print(json.loads(s[s.index("{"):])["src_socket_path"])') || return 1
+  fi
+  [[ -S "$forward" ]] || { printf 'devvm: invalid forwarded socket for %s\n' "$host" >&2; return 1; }
+  ln -sfn "$forward" "$socket_dir/$short.sock"
+  clean_remote_menus "$forward" || return 1
+}
+
+wait_for_file() {
+  local file=$1 deadline=$((SECONDS + 30))
+  while [[ ! -f "$file" ]]; do
+    ((SECONDS < deadline)) || return 1
+    sleep 0.1
+  done
+}
+
+# The short-lived local pane gives shell commands a route into this GUI's Lua API.
+if [[ ${1:-} == --request ]]; then
+  request=$2
+  request_encoded=$(python3 - "$request" <<'PY'
+import base64, json, os, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+request = json.loads(path.read_text())
+request['socket'] = os.environ['WEZTERM_UNIX_SOCKET']
+path.write_text(json.dumps(request))
+encoded = base64.b64encode(str(path).encode()).decode()
+print(encoded)
+PY
+  )
+  deadline=$((SECONDS + 30))
+  # Startup output can arrive before the GUI associates the new control window.
+  while [[ ! -f "$request.result" ]]; do
+    ((SECONDS < deadline)) || exit 1
+    printf '\033]1337;SetUserVar=DEVVM_REQUEST=%s\007' "$request_encoded"
+    sleep 0.1
+  done
+  touch "$request.consumed"
+  exit 0
+fi
+
+case ${1:-} in
+  help|-h|--help)
+    cat <<'HELP'
+devvm                    gather configured servers into one window
+devvm <host>             focus or open a server (aliases/fragments work)
+devvm local              focus a local tab in the unified window
+devvm detach <host>      move a server's panes into its own window
+devvm merge [host|all]   move panes back into the main window
+devvm ls                 list configured hosts
+devvm init               initialize the list from Enkaku (once)
+devvm add <host> [alias] add a host; restart WezTerm to register its domain
+devvm rm <host>          remove a host from the list; does not end sessions
+
+Remote sessions survive quitting WezTerm while their mux server is alive.
+Detach/merge preserves sessions but turns splits into separate tabs.
+HELP
+    exit 0 ;;
+  init)
+    [[ ! -e "$host_file" ]] || die "$host_file already exists; edit it or use devvm add"
+    mkdir -p "$config_dir"
+    targets=$("$ek" list-connect-targets)
+    python3 - "$host_file" "$targets" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+with path.open('x') as out:
+    out.write('# Full hostname, then an optional alias. Order sets Cmd+Opt+1..9.\n')
+    for target in json.loads(sys.argv[2]):
+        out.write(target['hostname'] + '\n')
+PY
+    printf 'Created %s; restart WezTerm before opening the unified view.\n' "$host_file"
+    exit 0 ;;
+  ls|list) hosts list; exit 0 ;;
+  add) [[ $# -ge 2 && $# -le 3 ]] || die 'usage: devvm add <host> [alias]'; hosts add "$2" "${3:-}"; printf 'Host added; restart WezTerm to register the new domain.\n'; exit 0 ;;
+  rm) [[ $# == 2 ]] || die 'usage: devvm rm <host>'; hosts rm "$2"; exit 0 ;;
+  --ensure) [[ $# == 2 ]] || die 'missing hostname'; host=$(hosts resolve "$2"); ensure_host "$host"; exit ;;
+  menu) die 'the terminal menu has been removed; tabs use the native bottom bar' ;;
+  local) action=local; selected='' ;;
+  detach) [[ $# == 2 ]] || die 'usage: devvm detach <host>'; action=detach; selected=$(hosts resolve "$2") ;;
+  merge) [[ $# -le 2 ]] || die 'usage: devvm merge [host|all]'; action=merge; selected=$(hosts resolve "${2:-all}") ;;
+  '') action=merge; selected=$(hosts resolve all) ;;
+  *) [[ $# == 1 ]] || die 'usage: devvm <host>'; action=open; selected=$(hosts resolve "$1") ;;
+esac
+[[ -n "$selected" || $action == local ]] || die 'no hosts configured; edit the devservers file'
+
+mkdir -p "$state_dir/requests"
+chmod 700 "$state_dir" "$state_dir/requests"
+ready=()
+failed=${DEVVM_PREPARED_FAILURE:-0}
+if "$lock_held" && [[ ${DEVVM_PREPARED_HOSTS+x} == x ]]; then selected=$DEVVM_PREPARED_HOSTS; fi
+while IFS= read -r host <&4; do
+  [[ -n "$host" ]] || continue
+  if "$lock_held" || [[ $action == detach ]] || ensure_host "$host"; then
+    ready+=("$host")
+  else
+    printf 'devvm: could not connect %s\n' "$host" >&2
+    failed=1
+  fi
+done 4<<<"$selected"
+((${#ready[@]})) || [[ $action == local ]] || die 'no devservers could be reached'
+if ! "$lock_held"; then
+  export DEVVM_PREPARED_HOSTS=$(printf '%s\n' ${ready[@]+"${ready[@]}"})
+  export DEVVM_PREPARED_FAILURE=$failed
+  exec python3 - "$state_dir/requests.lock" "$script_path" "$@" 3<&0 <<'PY'
+import fcntl, subprocess, sys, time
+lock_path, script, *args = sys.argv[1:]
+with open(lock_path, 'a') as lock:
+    deadline = time.monotonic() + 60
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                sys.exit('devvm: another command is still running')
+            time.sleep(0.1)
+    sys.exit(subprocess.call(['/bin/bash', script, '--locked', *args], stdin=3))
+PY
+fi
+request_dir=$(mktemp -d "$state_dir/requests/request.XXXXXX")
+trap 'rm -rf "$request_dir"' EXIT
+
+request="$request_dir/request.json"
+python3 - "$request" "$action" ${ready[@]+"${ready[@]}"} <<'PY'
+import json, sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({'action': sys.argv[2], 'hosts': sys.argv[3:]}))
+PY
+if "$wezterm" cli --no-auto-start list --format json >/dev/null 2>&1; then
+  request_workspace=$("$wezterm" cli --no-auto-start list-clients --format json | python3 -c 'import json,sys; print(next((c["workspace"] for c in json.load(sys.stdin)), "devservers"))')
+  # A mixed window can route a local spawn through its active remote domain.
+  "$wezterm" cli --no-auto-start spawn --domain-name local --new-window --workspace "$request_workspace" --cwd "$HOME" \
+    -- /bin/bash "$script_path" --request "$request" >/dev/null
+else
+  "$wezterm" start --always-new-process --workspace devservers --cwd "$HOME" \
+    -- /bin/bash "$script_path" --request "$request" >"$state_dir/startup.log" 2>&1 &
+fi
+wait_for_file "$request.result" || die 'WezTerm did not respond; ensure wezterm-work is installed and reload the config'
+wait_for_file "$request.consumed" || die 'request pane did not finish'
+python3 - "$request.result" <<'PY'
+import json, sys
+from pathlib import Path
+reply = json.loads(Path(sys.argv[1]).read_text())
+for message in reply['messages']:
+    print(message)
+for error in reply['errors']:
+    print('devvm: ' + error, file=sys.stderr)
+sys.exit(bool(reply['errors']))
+PY
+exit "$failed"

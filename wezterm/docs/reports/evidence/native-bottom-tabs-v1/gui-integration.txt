@@ -1,0 +1,14 @@
+alpha: in unified window
+beta: in unified window
+beta: in unified window
+Local tab
+alpha: detached
+alpha: focused
+alpha: in unified window
+alpha: detached
+beta: detached
+alpha: in unified window
+beta: in unified window
+alpha: in unified window
+beta: in unified window
+PASS: native mixed-domain tabs, inherited-menu cleanup, fresh GUI attachment, detach/merge and session preservation

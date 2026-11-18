@@ -1,0 +1,230 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "$script_dir" <<'PY'
+import json, os, re, subprocess, sys, tempfile, time
+from pathlib import Path
+
+source = Path(sys.argv[1])
+repo = source.parents[2]
+app = Path('/Applications/WezTerm.app/Contents/MacOS')
+wezterm = str(app / 'wezterm')
+processes = []
+
+def wait_for(check, description, timeout=15):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = check()
+        if value:
+            return value
+        time.sleep(0.1)
+    raise AssertionError('timed out: ' + description)
+
+with tempfile.TemporaryDirectory(prefix='devvm-integration-', dir='/tmp') as temp:
+    root = Path(temp)
+    try:
+        exit_token = 'DEVVM_FIXTURE_EXIT_' + str(os.getpid())
+        reader = "trap '' INT; stty -echo; while IFS= read -r line; do case \"$line\" in *'" + exit_token + "'*) exit 0;; esac; done"
+        config_dir = root / 'config'
+        config_dir.mkdir()
+        # Copy the actual module into an isolated config without stowing it at HOME.
+        (config_dir / 'wezterm_work.lua').write_bytes((source / 'wezterm_work.lua').read_bytes())
+        (config_dir / 'devservers').write_text('host-a.example.test alpha\nhost-b.example.test beta\n')
+        # Stale flags are migration input, not an opt-in to terminal panes.
+        (config_dir / 'domain-menu').touch()
+        (config_dir / 'domain-menu-used').touch()
+        sockets = root / 'sockets'
+        sockets.mkdir()
+        env = dict(os.environ, DEVVM_CONFIG_DIR=str(config_dir), DEVVM_SOCKET_DIR=str(sockets),
+                   DEVVM_STATE_DIR=str(root / 'state'), WEZTERM_LOG='info,config=debug')
+        forwards = {}
+        native_panes = {}
+        for short, title in [('host-a', 'DEVVM_ALPHA'), ('host-b', 'DEVVM_BETA')]:
+            socket = root / short / 'wezterm/sock'
+            socket.parent.mkdir(parents=True)
+            config = socket.parents[1] / 'config.lua'
+            config.write_text("return {unix_domains={{name='unix',socket_path=" + repr(str(socket))
+                              + "}},default_prog={'/bin/sh','-c'," + repr(reader)
+                              + "},default_cwd=" + repr(str(root)) + ",exit_behavior='Close'}\n")
+            log = (root / (short + '.log')).open('w')
+            processes.append(subprocess.Popen([str(app / 'wezterm-mux-server'), '--config-file', str(config)],
+                                               stdout=log, stderr=log, env=dict(env, XDG_RUNTIME_DIR=str(root))))
+            wait_for(socket.exists, 'remote test mux socket')
+            remote_env = dict(env, WEZTERM_UNIX_SOCKET=str(socket))
+            command = f"printf '\\033]0;{title}\\007\\nSESSION=%s\\n' \"$$\"; " + reader
+            created = subprocess.run([wezterm, '-n', 'cli', 'spawn', '--new-window', '--', '/bin/sh', '-c', command],
+                                     env=remote_env, check=True, capture_output=True, text=True)
+            native_panes[short] = int(created.stdout.strip())
+            menu_reader = "printf '\033]0;dotfiles-domain-menu\007'; stty -echo; while IFS= read -r line; do [ \"$line\" = DEVVM_MENU_EXIT ] && exit 0; done"
+            for height in (1, 8):
+                subprocess.run([wezterm, '-n', 'cli', 'split-pane', '--pane-id', str(native_panes[short]),
+                                '--bottom', '--top-level', '--cells', str(height), '--', '/bin/bash', '-c', menu_reader],
+                               env=remote_env, check=True, capture_output=True, text=True)
+            forwards[short] = {'hostname': short + '.example.test', 'outbound_udses': {
+                'test': {'dst_socket_path': '/run/user/1000/wezterm/sock', 'src_socket_path': str(socket)}}}
+
+        (root / 'status.json').write_text(json.dumps({'status': {'daemon_status': {'connections': forwards}}}))
+        ek = root / 'ek'
+        ek.write_text('''#!/usr/bin/env python3
+import json, os, subprocess, sys
+from pathlib import Path
+data = json.load(open(''' + repr(str(root / 'status.json')) + '''))
+if sys.argv[1] == 'status':
+    if os.environ.get('DEVVM_GUI_AUTH_TEST') == '1' and not Path(''' + repr(str(root / 'beta-connected')) + ''').exists():
+        data['status']['daemon_status']['connections'].pop('host-b', None)
+    print(json.dumps(data))
+elif sys.argv[1] == 'connect':
+    assert sys.stdin.isatty(), 'authentication stdin is not a terminal'
+    print('\\033]0;AUTH_BETA\\007AUTHENTICATION_READY', flush=True)
+    for line in sys.stdin:
+        if 'fixture-approve' in line:
+            Path(''' + repr(str(root / 'beta-connected')) + ''').touch()
+            sys.exit(0)
+    sys.exit(1)
+elif sys.argv[1] == 'run':
+    raise AssertionError('existing forwarded muxes must not require a remote shell')
+else:
+    sys.exit(1)
+''')
+        ek.chmod(0o755)
+        env['DEVVM_EK'] = str(ek)
+        gui_config = config_dir / 'gui.lua'
+        local_reader = "printf '\033]0;LOCAL_FIXTURE\007'; " + reader
+        gui_config.write_text('local w=require(\'wezterm\'); local c=dofile(' + repr(str(repo / 'wezterm/.config/wezterm/wezterm.lua'))
+                              + "); c.default_prog={'/bin/sh','-c'," + repr(local_reader)
+                              + "}; c.default_cwd=" + repr(str(root)) + "; c.exit_behavior='Close'; "
+                              + "w.on('update-status',function(g,p) local path=" + repr(str(root / 'active-'))
+                              + " .. g:mux_window():window_id() .. '.json'; local f=assert(io.open(path .. '.tmp','w')); "
+                              + "f:write(w.json_encode{title=p:get_title(),domain=p:get_domain_name(),pane_id=p:pane_id()}); "
+                              + "f:close();os.rename(path .. '.tmp',path);end); return c\n")
+        log = (root / 'gui.log').open('w')
+        gui = subprocess.Popen([str(app / 'wezterm-gui'), '--config-file', str(gui_config), 'start',
+                                '--always-new-process', '--class', 'devvm-integration-' + str(os.getpid()),
+                                '--workspace', 'personal'], stdout=log, stderr=log, env=env)
+        processes.append(gui)
+        gui_socket = Path.home() / '.local/share/wezterm' / ('gui-sock-' + str(gui.pid))
+        wait_for(gui_socket.exists, 'isolated GUI socket')
+        env['WEZTERM_UNIX_SOCKET'] = str(gui_socket)
+
+        def cli(*args):
+            p = subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=env,
+                               capture_output=True, text=True, timeout=15)
+            assert p.returncode == 0, p.stderr
+            return p.stdout
+
+        def listing():
+            return json.loads(cli('list', '--format', 'json'))
+
+        def run(*args):
+            p = subprocess.run([str(repo / 'wezterm-work/.local/bin/devvm'), *args], env=env,
+                               capture_output=True, text=True, timeout=45)
+            assert p.returncode == 0, p.stdout + p.stderr + '\nGUI: ' + (root / 'gui.log').read_text()[-5000:]
+            print(p.stdout.strip())
+
+        personal = wait_for(lambda: listing(), 'initial local pane')[0]['pane_id']
+        # Simulate an old live GUI being upgraded in place, with no migration marker.
+        for height in (1, 8):
+            cli('split-pane', '--pane-id', str(personal), '--bottom', '--top-level', '--cells', str(height),
+                '--', '/bin/bash', '-c', menu_reader)
+        wait_for(lambda: sum(p['title'] == 'dotfiles-domain-menu' for p in listing()) == 2, 'old local footers before reload')
+        gui_config.write_text(gui_config.read_text().replace('return c', "require('wezterm').GLOBAL.native_tabs_migrated=nil; return c"))
+        wait_for(lambda: not any(p['title'] == 'dotfiles-domain-menu' for p in listing()), 'in-place reload removes local footers')
+        run()
+        rows = wait_for(lambda: [p for p in listing() if p['workspace'] == 'devservers' and p['title'].startswith('DEVVM_')],
+                        'attached test panes')
+        alpha = next(p['pane_id'] for p in rows if p['title'] == 'DEVVM_ALPHA')
+        beta = next(p['pane_id'] for p in rows if p['title'] == 'DEVVM_BETA')
+        original_content = {p: wait_for(lambda: re.search(r'SESSION=(\d+)', cli('get-text', '--pane-id', str(p))),
+                                       'attached process output').group(0) for p in (alpha, beta)}
+        assert not any(p['title'] == 'dotfiles-domain-menu' for p in listing()), 'inherited menu survived migration'
+        main = next(p['window_id'] for p in listing() if p['pane_id'] == alpha and p['workspace'] == 'devservers')
+        assert any(p['pane_id'] == beta and p['window_id'] == main for p in listing())
+        def focused_row():
+            path = root / ('active-' + str(main) + '.json')
+            return json.loads(path.read_text()) if path.exists() else None
+        run('beta')
+        wait_for(lambda: focused_row() and focused_row()['domain'] in ('devserver:host-b', 'devserver:host-b:alternate'), 'host selection focuses its tab')
+        run('local')
+        wait_for(lambda: focused_row() and focused_row()['domain'] == 'local', 'local shortcut focuses the local tab')
+
+        split = int(cli('split-pane', '--pane-id', str(alpha), '--', '/bin/sh', '-c',
+                        "printf '\033]0;DEVVM_ALPHA_SPLIT\007\nSESSION=%s\n' \"$$\"; exec /bin/sh").strip())
+        split_content = wait_for(lambda: re.search(r'SESSION=(\d+)', cli('get-text', '--pane-id', str(split))), 'split process marker').group(0)
+        alpha_content, beta_content = original_content[alpha], original_content[beta]
+
+        def session_windows(marker):
+            windows = set()
+            for row in listing():
+                if row['workspace'] == 'devservers' and marker in cli('get-text', '--pane-id', str(row['pane_id'])):
+                    windows.add(row['window_id'])
+            return windows
+
+        run('detach', 'alpha')
+        detached = next(iter(wait_for(lambda: session_windows(alpha_content), 'detached original process')))
+        assert detached != main
+        assert session_windows(alpha_content) == {detached}
+        assert session_windows(split_content) == {detached}
+        assert session_windows(beta_content) == {main}
+        clients = json.loads(cli('list-clients', '--format', 'json'))
+        assert all(c['workspace'] == 'devservers' for c in clients), 'detach focused a stale source window'
+
+        run('alpha')
+        assert session_windows(alpha_content) == {detached}, 'open should focus detached host'
+        run('merge', 'alpha')
+        wait_for(lambda: all(session_windows(marker) == {main} for marker in (alpha_content, beta_content, split_content)), 'merged process membership')
+        run('detach', 'alpha')
+        run('detach', 'beta')
+        assert any(p['window_id'] == main and p['workspace'] == 'devservers' for p in listing()), 'local anchor lost'
+        run('merge')
+        run()
+        rows = listing()
+        assert all(session_windows(marker) == {main} for marker in (alpha_content, beta_content, split_content)), 'original process was replaced or misplaced'
+        assert any(p['pane_id'] == personal and p['workspace'] == 'personal' for p in rows), 'unrelated local session changed'
+        new_env = dict(env)
+        new_env.pop('WEZTERM_UNIX_SOCKET', None)
+        native_env = dict(env, WEZTERM_UNIX_SOCKET=forwards['host-b']['outbound_udses']['test']['src_socket_path'])
+        def native_beta():
+            return json.loads(subprocess.check_output([wezterm, '-n', 'cli', 'list', '--format', 'json'], env=native_env, text=True))
+        before = {p['pane_id'] for p in native_beta()}
+        for height in (1, 8):
+            subprocess.run([wezterm, '-n', 'cli', 'split-pane', '--pane-id', str(native_panes['host-b']),
+                            '--bottom', '--top-level', '--cells', str(height), '--', '/bin/bash', '-c', menu_reader],
+                           env=native_env, check=True, capture_output=True, text=True)
+        wait_for(lambda: sum(p['title'] == 'dotfiles-domain-menu' for p in native_beta()) == 2, 'inherited menus before direct attachment')
+        second = subprocess.Popen([str(app / 'wezterm-gui'), '--config-file', str(gui_config), 'start',
+                                   '--always-new-process', '--class', 'devvm-native-tabs-' + str(os.getpid()),
+                                   '--domain', 'devserver:host-b', '--attach'], stdout=log, stderr=log, env=new_env)
+        processes.append(second)
+        second_socket = Path.home() / '.local/share/wezterm' / ('gui-sock-' + str(second.pid))
+        wait_for(second_socket.exists, 'second GUI attachment')
+        wait_for(lambda: not any(p['title'] == 'dotfiles-domain-menu' for p in native_beta()), 'direct attachment cleans inherited menus')
+        # The next scheduled status updates must not spawn any terminal chrome.
+        time.sleep(2)
+        after = native_beta()
+        assert {p['pane_id'] for p in after} == before, 'fresh GUI created terminal panes'
+        assert not any(p['title'] == 'dotfiles-domain-menu' for p in after), 'fresh GUI resurrected a footer'
+        print('PASS: native mixed-domain tabs, inherited-menu cleanup, fresh GUI attachment, detach/merge and session preservation')
+    except Exception:
+        if 'cli' in locals():
+            try:
+                for pane in listing():
+                    print('PANE:', {key: pane[key] for key in ('window_id', 'tab_id', 'pane_id', 'workspace', 'title')})
+                    if pane['title'] != 'dotfiles-domain-menu':
+                        print(cli('get-text', '--pane-id', str(pane['pane_id']))[-1500:])
+            except Exception as error:
+                print('diagnostic failed:', error)
+        for path in (root / 'state').rglob('request.json*'):
+            print(path.name + ': ' + path.read_text())
+        for path in root.glob('*.log'):
+            print(path.name + ':\n' + path.read_text()[-5000:])
+        raise
+    finally:
+        for process in reversed(processes):
+            process.terminate()
+        for process in reversed(processes):
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait()
+PY

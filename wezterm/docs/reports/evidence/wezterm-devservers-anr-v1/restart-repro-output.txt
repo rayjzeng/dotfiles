@@ -1,0 +1,19 @@
+restart-delay-menu {"second": 0, "list_seconds": 0.036, "gui_alive": true, "panes": 2, "menus": []}
+restart-delay-menu {"second": 1, "list_seconds": 0.023, "gui_alive": true, "panes": 2, "menus": []}
+restart-delay-menu {"second": 2, "list_seconds": 0.016, "gui_alive": true, "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-delay-menu {"second": 3, "list_seconds": 0.01, "gui_alive": true, "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-delay-menu {"second": 4, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-delay-menu SECOND_GUI 76851
+restart-delay-menu {"second": 5, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-delay-menu {"second": 6, "list_seconds": 0.013, "gui_alive": true, "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-delay-menu {"second": 7, "list_seconds": 0.015, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 2]]}
+restart-delay-menu {"second": 8, "list_seconds": 0.018, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 9, "list_seconds": 0.014, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 10, "list_seconds": 0.013, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 11, "list_seconds": 0.017, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 12, "list_seconds": 0.02, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 13, "list_seconds": 0.014, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 14, "list_seconds": 0.015, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 15, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 16, "list_seconds": 0.03, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-delay-menu {"second": 17, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}

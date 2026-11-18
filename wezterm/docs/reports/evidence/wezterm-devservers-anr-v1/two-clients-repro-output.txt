@@ -1,0 +1,50 @@
+two-clients-delay-menu {"second": 0, "list_seconds": 0.029, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-menu {"second": 1, "list_seconds": 0.024, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-menu {"second": 2, "list_seconds": 0.018, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+two-clients-delay-menu {"second": 3, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+two-clients-delay-menu {"second": 4, "list_seconds": 0.013, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+two-clients-delay-menu SECOND_GUI 61163
+two-clients-delay-menu {"second": 5, "list_seconds": 0.018, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+two-clients-delay-menu {"second": 6, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+two-clients-delay-menu {"second": 7, "list_seconds": 0.014, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 8, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 9, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 10, "list_seconds": 0.011, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 11, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 12, "list_seconds": 0.019, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 13, "list_seconds": 0.015, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 14, "list_seconds": 0.018, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 15, "list_seconds": 0.033, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 16, "list_seconds": 0.013, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 17, "list_seconds": 0.014, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 18, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 19, "list_seconds": 0.014, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 20, "list_seconds": 0.011, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 21, "list_seconds": 0.015, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 22, "list_seconds": 0.013, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-menu {"second": 23, "list_seconds": 0.012, "gui_alive": true, "panes": 6, "menus": [[0, 2, 1], [0, 4, 1], [1, 3, 1], [1, 5, 1]]}
+two-clients-delay-no-menu {"second": 0, "list_seconds": 0.014, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 1, "list_seconds": 0.037, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 2, "list_seconds": 0.016, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 3, "list_seconds": 0.016, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 4, "list_seconds": 0.021, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu SECOND_GUI 72102
+two-clients-delay-no-menu {"second": 5, "list_seconds": 0.02, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 6, "list_seconds": 0.013, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 7, "list_seconds": 0.02, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 8, "list_seconds": 0.017, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 9, "list_seconds": 0.023, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 10, "list_seconds": 0.023, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 11, "list_seconds": 0.02, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 12, "list_seconds": 0.017, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 13, "list_seconds": 0.012, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 14, "list_seconds": 0.017, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 15, "list_seconds": 0.011, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 16, "list_seconds": 0.019, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 17, "list_seconds": 0.014, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 18, "list_seconds": 0.028, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 19, "list_seconds": 0.026, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 20, "list_seconds": 0.019, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 21, "list_seconds": 0.033, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 22, "list_seconds": 0.025, "gui_alive": true, "panes": 2, "menus": []}
+two-clients-delay-no-menu {"second": 23, "list_seconds": 0.023, "gui_alive": true, "panes": 2, "menus": []}

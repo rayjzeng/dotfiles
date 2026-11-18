@@ -1,0 +1,146 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+devvm="$script_dir/devvm"
+test_dir=$(mktemp -d /tmp/devvm-test.XXXXXX)
+trap 'result=$?; if ((result != 0)); then cat "$test_dir/output"; fi; rm -rf "$test_dir"' EXIT
+export DEVVM_CONFIG_DIR="$test_dir/config"
+export DEVVM_SOCKET_DIR="$test_dir/sockets"
+export DEVVM_STATE_DIR="$test_dir/state"
+mkdir -p "$DEVVM_CONFIG_DIR" "$DEVVM_SOCKET_DIR"
+
+expect_failure() {
+  if "$devvm" "$@" >"$test_dir/output" 2>&1; then
+    printf 'expected failure: %s\n' "$*" >&2
+    exit 1
+  fi
+}
+
+expect_failure ls
+grep -q 'devvm init' "$test_dir/output"
+
+cat >"$DEVVM_CONFIG_DIR/devservers" <<'HOSTS'
+# host alias
+devvm123.example.test primary
+devvm124.example.test secondary # inline comment
+
+HOSTS
+"$devvm" ls >"$test_dir/output"
+grep -q 'devvm123.example.test.*primary' "$test_dir/output"
+grep -q 'devvm124.example.test.*secondary' "$test_dir/output"
+
+cp "$DEVVM_CONFIG_DIR/devservers" "$test_dir/original"
+expect_failure rm 12
+grep -q 'ambiguous' "$test_dir/output"
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure rm nonexistent
+grep -q 'no host' "$test_dir/output"
+expect_failure add devvm125.example.test primary
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure add devvm123.another.test other
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure add 'bad/host' third
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+
+"$devvm" add devvm125.example.test third
+"$devvm" rm third
+! grep -q devvm125 "$DEVVM_CONFIG_DIR/devservers"
+"$devvm" rm primary
+! grep -q devvm123 "$DEVVM_CONFIG_DIR/devservers"
+grep -q devvm124 "$DEVVM_CONFIG_DIR/devservers"
+
+cat >"$test_dir/ek" <<'EK'
+#!/bin/bash
+case "$1" in
+  status) printf '%s\n' '{"status":{"daemon_status":{"connections":{"peer":{"hostname":"devvm124.example.test","outbound_udses":{"forward":{"dst_socket_path":"/run/user/1000/wezterm/sock","src_socket_path":"PLACEHOLDER"}}}}}}}' ;;
+  run) exit 0 ;;
+  *) exit 1 ;;
+esac
+EK
+python3 - "$test_dir" <<'PY'
+import socket, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+server = socket.socket(socket.AF_UNIX)
+server.bind(str(root / 'mux.sock'))
+path = root / 'ek'
+path.write_text(path.read_text().replace('PLACEHOLDER', str(root / 'mux.sock')))
+PY
+chmod +x "$test_dir/ek"
+export DEVVM_EK="$test_dir/ek"
+cat >"$test_dir/wezterm" <<'WT'
+#!/bin/bash
+[[ $1 == -n ]] && { printf '[]\n'; exit 0; }
+exit 1
+WT
+chmod +x "$test_dir/wezterm"
+export DEVVM_WEZTERM="$test_dir/wezterm"
+"$devvm" --ensure devvm124.example.test
+test "$(readlink "$DEVVM_SOCKET_DIR/devvm124.sock")" = "$test_dir/mux.sock"
+
+printf 'unrelated\n' >"$DEVVM_SOCKET_DIR/devvm124.sock.unrelated"
+rm "$DEVVM_SOCKET_DIR/devvm124.sock"
+printf 'do not replace\n' >"$DEVVM_SOCKET_DIR/devvm124.sock"
+expect_failure --ensure devvm124.example.test
+grep -q 'do not replace' "$DEVVM_SOCKET_DIR/devvm124.sock"
+grep -q unrelated "$DEVVM_SOCKET_DIR/devvm124.sock.unrelated"
+
+expect_failure add devvm127.example.test all
+"$devvm" add devvm126.example.test healthy
+python3 - "$test_dir" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+ek = root / 'ek'
+ek.write_text(ek.read_text().replace('devvm124.example.test', 'devvm126.example.test'))
+(root / 'wezterm').write_text('''#!/bin/bash
+if [[ $1 == -n ]]; then printf '[]\\n'; exit 0; fi
+if [[ $1 == cli ]]; then exit 1; fi
+for arg in "$@"; do
+  if [[ $arg == */devvm ]]; then [[ $arg == /* ]] || exit 1; fi
+done
+request=${!#}
+python3 - "$request" <<'REPLY'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+request = json.loads(p.read_text())
+assert request['hosts'] == ['devvm126.example.test'], request
+(p.parents[2] / 'healthy-request').write_text('received')
+Path(str(p) + '.result').write_text(json.dumps({'messages': [], 'errors': []}))
+Path(str(p) + '.consumed').touch()
+REPLY
+''')
+(root / 'wezterm').chmod(0o755)
+PY
+export DEVVM_WEZTERM="$test_dir/wezterm"
+expect_failure merge all
+test -f "$DEVVM_STATE_DIR/healthy-request"
+expect_failure
+test -f "$DEVVM_STATE_DIR/healthy-request"
+
+"$devvm" rm secondary
+export DEVVM_TEST_DIR="$test_dir"
+python3 - "$test_dir/wezterm" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+s = s.replace('request=${!#}', '''if ! mkdir "$DEVVM_TEST_DIR/inflight"; then touch "$DEVVM_TEST_DIR/overlap"; fi
+trap 'rmdir "$DEVVM_TEST_DIR/inflight"' EXIT
+sleep 0.2
+request=${!#}''')
+p.write_text(s)
+PY
+printf 'old owner is gone\n' >"$DEVVM_STATE_DIR/requests.lock"
+"$devvm" >"$test_dir/first" 2>&1 &
+first=$!
+"$devvm" >"$test_dir/second" 2>&1 &
+second=$!
+wait "$first"
+wait "$second"
+test ! -e "$test_dir/overlap"
+
+(cd "$script_dir"; /bin/bash ./devvm) >"$test_dir/relative" 2>&1
+printf 'PASS: devvm host resolution, validation, socket preservation, and relative invocation\n'

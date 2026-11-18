@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "${1:-$script_dir/devvm}" <<'PY'
+import json, os, pty, select, subprocess, sys, tempfile, time
+from pathlib import Path
+
+with tempfile.TemporaryDirectory(prefix='devvm-request-', dir='/tmp') as directory:
+    request = Path(directory) / 'request.json'
+    request.write_text(json.dumps({'action': 'local', 'hosts': []}))
+    master, slave = pty.openpty()
+    child = subprocess.Popen(['/bin/bash', sys.argv[1], '--request', str(request)],
+                             stdin=slave, stdout=slave, stderr=slave,
+                             env=dict(os.environ, WEZTERM_UNIX_SOCKET='/tmp/request-fixture.sock'))
+    os.close(slave)
+    output = b''
+    replied = False
+    deadline = time.monotonic() + 4
+    try:
+        while time.monotonic() < deadline and child.poll() is None:
+            if select.select([master], [], [], .1)[0]:
+                try:
+                    output += os.read(master, 65536)
+                except OSError:
+                    break
+            # The first startup notification is deliberately dropped.
+            if output.count(b'\x1b]1337;SetUserVar=DEVVM_REQUEST=') >= 2 and not replied:
+                Path(str(request) + '.result').write_text(json.dumps({'messages': [], 'errors': []}))
+                replied = True
+        assert replied, 'request was not retried after a lost startup notification'
+        assert child.wait(timeout=2) == 0
+        assert Path(str(request) + '.consumed').exists()
+        print('PASS: request delivery retries a lost startup notification and acknowledges the reply')
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            child.wait(timeout=2)
+        os.close(master)
+PY

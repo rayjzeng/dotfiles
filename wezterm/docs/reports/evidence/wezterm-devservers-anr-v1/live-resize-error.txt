@@ -1,0 +1,5 @@
+12:19:27.005  ERROR  wezterm_gui::termwindow > while processing window-resized event: Input/output error (os error 5)
+stack traceback:
+	[C]: in method 'send_text'
+	/Users/rayzeng/.config/wezterm/wezterm_domains.lua:300: in upvalue 'update'
+	/Users/rayzeng/.config/wezterm/wezterm_domains.lua:406: in function </Users/rayzeng/.config/wezterm/wezterm_domains.lua:398>
