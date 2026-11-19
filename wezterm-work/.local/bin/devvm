@@ -157,8 +157,20 @@ mux_alive() {
   WEZTERM_UNIX_SOCKET=$1 "$wezterm" -n cli --no-auto-start list >/dev/null 2>&1
 }
 
+first_answering() {
+  local candidate
+  for candidate in "$@"; do
+    if [[ -S "$candidate" ]] && mux_alive "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 ensure_host() {
-  local host=$1 short=${1%%.*} status forward remote relay
+  local host=$1 short=${1%%.*} status forward remote relay candidate
+  local forwards=()
   command -v "$ek" >/dev/null || die 'Enkaku is missing (ek)'
   mkdir -p "$socket_dir"
   if [[ -e "$socket_dir/$short.sock" && ! -L "$socket_dir/$short.sock" ]]; then
@@ -171,17 +183,19 @@ ensure_host() {
     "$ek" connect "$host" || return 1
     status=$("$ek" status)
   fi
-  forward=$(python3 -c '
+  while IFS= read -r candidate; do
+    forwards+=("$candidate")
+  done < <(python3 -c '
 import json,re,sys
 for c in json.load(sys.stdin)["status"]["daemon_status"]["connections"].values():
     if c.get("hostname") == sys.argv[1]:
         for f in (c.get("outbound_udses") or {}).values():
             if re.fullmatch(r"/run/user/\d+/wezterm/sock", f.get("dst_socket_path", "")):
-                print(f["src_socket_path"]); sys.exit(0)
+                print(f["src_socket_path"])
 ' "$host" <<<"$status")
   # A killed mux server leaves both its remote socket file and the Enkaku
   # forward behind, so only a successful round trip proves the server is alive.
-  if [[ -z "$forward" || ! -S "$forward" ]] || ! mux_alive "$forward"; then
+  if ! forward=$(first_answering ${forwards[@]+"${forwards[@]}"}); then
     remote=$("$ek" run -s "$host" -- '
       export XDG_RUNTIME_DIR=/run/user/$(id -u)
       p=$XDG_RUNTIME_DIR/wezterm/sock
@@ -193,7 +207,9 @@ for c in json.load(sys.stdin)["status"]["daemon_status"]["connections"].values()
       fi
       alive && echo "$p"') || return 1
     [[ -n "$remote" ]] || { printf 'devvm: no mux server on %s\n' "$host" >&2; return 1; }
-    if [[ -z "$forward" || ! -S "$forward" ]]; then
+    # A forward made for the previous server process only returns EOF, so reuse
+    # an existing forward only if it now answers.
+    if ! forward=$(first_answering ${forwards[@]+"${forwards[@]}"}); then
       forward=$("$ek" forward-uds "$remote" "WezTerm devserver $short" "$host" |
         python3 -c 'import json,sys; s=sys.stdin.read(); print(json.loads(s[s.index("{"):])["src_socket_path"])') || return 1
     fi

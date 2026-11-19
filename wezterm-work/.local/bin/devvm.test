@@ -81,24 +81,59 @@ test "$(readlink "$DEVVM_SOCKET_DIR/devvm124.sock")" = "$DEVVM_STATE_DIR/relays/
 test -S "$DEVVM_STATE_DIR/relays/devvm124.sock"
 grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
 
-# A killed mux server leaves the forward socket in place; ensure must restart it remotely.
+# A killed mux server leaves its socket and Enkaku forward behind. ensure must
+# restart the server, reuse the old forward only if it answers again, and
+# otherwise forward afresh: a forward made for the old server only returns EOF.
 cp "$test_dir/ek" "$test_dir/ek.healthy"
 cp "$test_dir/wezterm" "$test_dir/wezterm.healthy"
-python3 - "$test_dir" <<'PY'
-import sys
+fake_killed_server() {  # $1: socket that answers once the server restarts
+  rm -f "$test_dir/restarted" "$test_dir/reforwarded"
+  python3 - "$test_dir" "$1" <<'PY'
+import socket, sys
 from pathlib import Path
-root = Path(sys.argv[1])
+root, answering = Path(sys.argv[1]), sys.argv[2]
+fresh = root / 'fresh.sock'
+if not fresh.exists():
+    socket.socket(socket.AF_UNIX).bind(str(fresh))
 ek = root / 'ek'
-ek.write_text(ek.read_text().replace('  run) exit 0 ;;', f'''  run) touch {root}/restarted; echo /run/user/1000/wezterm/sock ;;
-  forward-uds) touch {root}/reforwarded; exit 1 ;;'''))
-(root / 'wezterm').write_text(f'''#!/bin/bash
-[[ $1 == -n && -e {root}/restarted ]] && {{ printf '[]\\n'; exit 0; }}
+ek.write_text((root / 'ek.healthy').read_text().replace('  run) exit 0 ;;', f"""  run) touch {root}/restarted; echo /run/user/1000/wezterm/sock ;;
+  forward-uds) touch {root}/reforwarded; printf '{{"src_socket_path": "{fresh}"}}\\n' ;;"""))
+(root / 'wezterm').write_text(f"""#!/bin/bash
+[[ $1 == -n && -e {root}/restarted && $WEZTERM_UNIX_SOCKET == {answering} ]] && {{ printf '[]\\n'; exit 0; }}
 exit 1
-''')
+""")
 PY
+}
+fake_killed_server "$test_dir/mux.sock"
 "$devvm" --ensure devvm124.example.test
 test -e "$test_dir/restarted"
 test ! -e "$test_dir/reforwarded"
+fake_killed_server "$test_dir/fresh.sock"
+"$devvm" --ensure devvm124.example.test
+test -e "$test_dir/restarted"
+test -e "$test_dir/reforwarded"
+grep -q "\"upstream\": \"$test_dir/fresh.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
+
+# With a dead forward listed before a live one, use the live one without restarting.
+python3 - "$test_dir" <<'PY'
+import json, socket, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+socket.socket(socket.AF_UNIX).bind(str(root / 'dead.sock'))
+ek = root / 'ek'
+text = (root / 'ek.healthy').read_text()
+marker = '"outbound_udses":{'
+dead = '"dead":{"dst_socket_path":"/run/user/1000/wezterm/sock","src_socket_path":"' + str(root / 'dead.sock') + '"},'
+ek.write_text(text.replace(marker, marker + dead).replace('  run) exit 0 ;;', f'  run) touch {root}/restarted; exit 0 ;;'))
+(root / 'wezterm').write_text(f"""#!/bin/bash
+[[ $1 == -n && $WEZTERM_UNIX_SOCKET == {root / 'mux.sock'} ]] && {{ printf '[]\\n'; exit 0; }}
+exit 1
+""")
+PY
+rm -f "$test_dir/restarted"
+"$devvm" --ensure devvm124.example.test
+test ! -e "$test_dir/restarted"
+grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
 mv "$test_dir/ek.healthy" "$test_dir/ek"
 mv "$test_dir/wezterm.healthy" "$test_dir/wezterm"
 
