@@ -1,0 +1,12 @@
+[
+  {
+    "case": "plain-shell",
+    "allocated_seconds": 0.22,
+    "first_output_seconds": 0.546
+  },
+  {
+    "case": "configured-shell",
+    "allocated_seconds": 0.193,
+    "first_output_seconds": 0.767
+  }
+]

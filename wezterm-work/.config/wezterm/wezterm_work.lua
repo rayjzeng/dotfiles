@@ -3,7 +3,7 @@ local work = {}
 local config_dir = os.getenv('DEVVM_CONFIG_DIR') or wezterm.home_dir .. '/.config/wezterm'
 local socket_dir = os.getenv('DEVVM_SOCKET_DIR') or wezterm.home_dir .. '/.local/share/wezterm-devservers'
 local state_dir = os.getenv('DEVVM_STATE_DIR') or wezterm.home_dir .. '/.local/state/wezterm-devservers'
-local helper = wezterm.home_dir .. '/.local/bin/devvm'
+local helper = os.getenv('DEVVM_HELPER') or wezterm.home_dir .. '/.local/bin/devvm'
 local workspace = 'devservers'
 local hosts, by_name, by_domain, by_short = {}, {}, {}, {}
 
@@ -66,15 +66,19 @@ local function window_panes(window)
 end
 
 local function domain_panes(host)
-  local panes = {}
+  local panes, duplicates = {}, false
   for _, window in ipairs(wezterm.mux.all_windows()) do
-    for id, pane in pairs(window_panes(window)) do
-      if pane:get_domain_name() == host.domain then
-        panes[id] = pane
+    for _, tab in ipairs(window:tabs()) do
+      for _, pane in ipairs(tab:panes()) do
+        if pane:get_domain_name() == host.domain then
+          local id = pane:pane_id()
+          duplicates = duplicates or panes[id] ~= nil
+          panes[id] = pane
+        end
       end
     end
   end
-  return panes
+  return panes, duplicates
 end
 
 local function remembered_window(id)
@@ -152,112 +156,39 @@ local function focus(window, pane)
   select(0)
 end
 
-local function attach(host)
-  local domain = wezterm.mux.get_domain(host.domain)
-  if not domain then
-    error(host.short .. ': domain is not registered; restart WezTerm after adding a host')
+local function relocate_host(host, destination, force)
+  local domain = assert(wezterm.mux.get_domain(host.domain), 'restart WezTerm to register ' .. host.label)
+  local present = window_panes(destination)
+  local existing, duplicates = domain_panes(host)
+  local other_name = host.domain == host.domains[1] and host.domains[2] or host.domains[1]
+  local other = wezterm.mux.get_domain(other_name)
+  local ready = next(existing) ~= nil and not duplicates and (not other or other:state() == 'Detached')
+  for id in pairs(existing) do ready = ready and present[id] ~= nil end
+  local key = 'devservers_direct_' .. host.short
+  if not force and ready and domain:state() == 'Attached' and wezterm.GLOBAL[key] == destination:window_id() then
+    local _, pane = next(existing)
+    return pane
   end
-  domain:attach()
-end
 
-local function move_to_window(pane, destination, socket)
+  for _, name in ipairs(host.domains) do
+    local old = wezterm.mux.get_domain(name)
+    if old and old:state() == 'Attached' then old:detach() end
+  end
   local ok, _, stderr = wezterm.run_child_process {
-    '/usr/bin/env', 'WEZTERM_UNIX_SOCKET=' .. socket,
-    wezterm.executable_dir .. '/wezterm', '-n', 'cli', '--no-auto-start',
-    'move-pane-to-new-tab', '--pane-id', tostring(pane:pane_id()),
-    '--window-id', tostring(destination:window_id()),
+    '/bin/bash', helper, '--group', host.name, destination:get_workspace(),
   }
-  if not ok then error(stderr) end
-end
-
-local function move_host(host, destination, socket)
-  local bootstrap
-  local present = window_panes(destination)
-  local existing = domain_panes(host)
-  local has_domain = false
-  for _, pane in pairs(present) do
-    if pane:get_domain_name() == host.domain then has_domain = true end
-  end
-  -- A destination must already belong to this domain or the remote mux creates
-  -- another window when it files the moved panes.
-  if not has_domain then
-    -- A mixed window's active pane may advertise a path from another machine.
-    local _, pane = destination:spawn_tab { domain = { DomainName = host.domain }, cwd = '/' }
-    if next(existing) then bootstrap = pane end
-  end
-  local moved = false
-  for id in pairs(existing) do
-    if not present[id] and (not bootstrap or id ~= bootstrap:pane_id()) then moved = true end
-  end
-  if moved then
-    -- Move every member of a split into its own tab. Leaving an already mirrored
-    -- member in place lets the next remote layout update remove that member.
-    local ids = {}
-    for id in pairs(existing) do table.insert(ids, id) end
-    table.sort(ids)
-    for _, id in ipairs(ids) do
-      if not bootstrap or id ~= bootstrap:pane_id() then
-        move_to_window(existing[id], destination, socket)
-      end
-    end
-  end
-  -- Only close the shell we created; existing panes are never terminated.
-  if bootstrap and moved then bootstrap:send_text('exit\n') end
+  assert(ok, host.label .. ': ' .. stderr)
+  host.domain = host.domain == host.domains[1] and host.domains[2] or host.domains[1]
+  wezterm.GLOBAL['devservers_domain_' .. host.short] = host.domain
+  domain = assert(wezterm.mux.get_domain(host.domain))
+  -- Attach native tabs into the destination; moving client panes leaves their
+  -- stored remote tab IDs stale, so later resizes target the wrong server tab.
+  domain:attach(destination)
+  wezterm.GLOBAL[key] = destination:window_id()
   for _, pane in pairs(window_panes(destination)) do
-    if pane:get_domain_name() == host.domain and (not bootstrap or pane:pane_id() ~= bootstrap:pane_id()) then
-      return pane
-    end
+    if pane:get_domain_name() == host.domain then return pane end
   end
-end
-
-local function relocate_host(host, destination, socket, force)
-  local present = window_panes(destination)
-  local needs_move = false
-  for id in pairs(domain_panes(host)) do
-    if not present[id] then needs_move = true end
-  end
-  if needs_move or force then
-    -- Clear the client's mirrored tabs before moving again. The remote mux keeps
-    -- its processes; reattachment gives this GUI a consistent pane/tab graph.
-    local domain = wezterm.mux.get_domain(host.domain)
-    domain:detach()
-    -- The old client's background cleanup can detach its domain after this call
-    -- returns. A second registered domain prevents it from detaching the new
-    -- connection while preserving the remote server's processes.
-    host.domain = host.domain == host.domains[1] and host.domains[2] or host.domains[1]
-    wezterm.GLOBAL['devservers_domain_' .. host.short] = host.domain
-    wezterm.mux.get_domain(host.domain):attach()
-  end
-  return move_host(host, destination, socket)
-end
-
-local function hide_duplicates()
-  local windows = wezterm.mux.all_windows()
-  local members = {}
-  for _, window in ipairs(windows) do members[window:window_id()] = window_panes(window) end
-  for _, window in ipairs(windows) do
-    local mine = members[window:window_id()]
-    local all_remote = next(mine) ~= nil
-    for _, pane in pairs(mine) do
-      all_remote = all_remote and work.is_managed_domain(pane:get_domain_name())
-    end
-    if all_remote then
-      for _, other in ipairs(windows) do
-        if other:window_id() ~= window:window_id() and other:get_workspace() == workspace then
-          local theirs = members[other:window_id()]
-          local shared, additional = true, false
-          for id in pairs(mine) do shared = shared and theirs[id] ~= nil end
-          for id in pairs(theirs) do additional = additional or mine[id] == nil end
-          if shared and (additional or other:window_id() < window:window_id()) then
-            -- Some mux versions leave mirrored windows after a move. Hide the
-            -- copies without closing their shared sessions.
-            window:set_workspace('devservers-stale')
-            break
-          end
-        end
-      end
-    end
-  end
+  error(host.label .. ': attached tabs did not reach the destination window')
 end
 
 local function execute(request, control)
@@ -286,12 +217,11 @@ local function execute(request, control)
           destination = window
           destination:set_title(host.label)
         end
-        local pane = relocate_host(host, destination, request.socket, true)
+        local pane = relocate_host(host, destination, true)
         wezterm.GLOBAL['devservers_detached_' .. host.short] = destination:window_id()
         if pane then focus(destination, pane) end
         return host.label .. ': detached'
       end
-      attach(host)
       if request.action == 'open' then
         local detached = remembered_window(wezterm.GLOBAL['devservers_detached_' .. host.short])
         if detached then
@@ -303,7 +233,7 @@ local function execute(request, control)
           end
         end
       end
-      local pane = relocate_host(host, main, request.socket,
+      local pane = relocate_host(host, main,
         wezterm.GLOBAL['devservers_detached_' .. host.short] ~= nil)
       wezterm.GLOBAL['devservers_detached_' .. host.short] = nil
       if pane then focus(main, pane) end
@@ -311,7 +241,6 @@ local function execute(request, control)
     end)
     if ok then table.insert(messages, result) else table.insert(errors, tostring(result)) end
   end
-  hide_duplicates()
   return { messages = messages, errors = errors }
 end
 

@@ -1,0 +1,17 @@
+alpha: in unified window
+beta: in unified window
+beta: in unified window
+Local tab
+PASS: equal Cmd+D/Cmd+Shift+D splits and in-frame terminal geometry after window resize
+alpha: detached
+alpha: focused
+alpha: in unified window
+alpha: detached
+beta: detached
+alpha: in unified window
+beta: in unified window
+alpha: in unified window
+beta: in unified window
+beta: in unified window
+beta: in unified window
+PASS: native mixed-domain tabs, inherited-menu cleanup, fresh GUI attachment, detach/merge and session preservation

@@ -2,6 +2,18 @@
 
 Updated: 2026-11-18. Repository: `/Users/rayzeng/dotfiles`.
 
+## Remote split/resize fix — 2026-11-18
+
+The current uncommitted fix prepares native server tabs before attaching them
+with `domain:attach(destination)`. It removes post-attachment client-pane moves
+and hidden mirror cleanup. Those moves left stored server tab IDs stale, causing
+splits and resizing to use old measurements. Existing grouped splits now survive
+reconnect/detach/merge. Initial native multi-window consolidation may flatten
+panes moved from other windows. Tests cover both split shortcuts, window resizing,
+extra-alias recovery, and process continuity. The two live server views were
+migrated without restarting their shells. See
+`wezterm/docs/reports/remote-split-resize-fix-v1.md` for the short report.
+
 ## Superseding native-bar revision — 2026-11-18
 
 The user replaced the two-bar prototype with one native bottom Powerline bar,

@@ -30,8 +30,10 @@ window, with domain/server labels and colors. Active tabs are filled and bold;
 Cmd+Shift+T opens the tab navigator for overflow. A per-domain selector is deferred.
 
 The optional work package registers paired named mux domains and keeps connection,
-local request transport, and open/detach/merge orchestration. Moves preserve
-processes and scrollback but may flatten splits into tabs. Local anchor tabs keep
+local request transport, and open/detach/merge orchestration. Native server windows are consolidated
+before attachment, and their tabs attach directly to the destination window.
+Existing grouped splits, processes, and scrollback survive reconnect/detach/merge;
+initial consolidation can flatten panes moved from other native windows. Local anchor tabs keep
 main and detached windows alive. The shared renderer uses PaneInformation
 snapshots; it performs no pane spawning, child processes, or network operations.
 
@@ -112,7 +114,8 @@ handling against the installed Enkaku contract.
 window without restarting their processes.
 
 **Acceptance criteria:** Explicit detach/merge commands move only matching panes;
-split panes become individual tabs. Main-window identity remains stable.
+grouped native splits remain intact. Initial consolidation of other server
+windows can flatten their moved panes. Main-window identity remains stable.
 
 **Verification needs:** Runtime moves with multiple hosts and unequal tab counts.
 

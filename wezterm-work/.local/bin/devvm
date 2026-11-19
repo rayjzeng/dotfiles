@@ -110,6 +110,42 @@ except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
 MENUS
 }
 
+group_remote_tabs() {
+  local host=$1 workspace=$2
+  clean_remote_menus "$socket_dir/${host%%.*}.sock" || return 1
+  python3 - "$wezterm" "$socket_dir/${host%%.*}.sock" "$workspace" <<'GROUP'
+import collections, json, os, subprocess, sys
+command = [sys.argv[1], "-n", "cli", "--no-auto-start"]
+env = dict(os.environ, WEZTERM_UNIX_SOCKET=sys.argv[2])
+env.pop("WEZTERM_PANE", None)
+
+def cli(*args):
+    result = subprocess.run(command + list(args), env=env, capture_output=True, text=True, timeout=10)
+    if result.returncode:
+        raise RuntimeError("native mux " + args[0] + " failed")
+    return result.stdout
+
+try:
+    rows = json.loads(cli("list", "--format", "json"))
+    if not rows:
+        cli("spawn", "--new-window", "--cwd", "/")
+        rows = json.loads(cli("list", "--format", "json"))
+    windows = collections.defaultdict(set)
+    for row in rows:
+        windows[row["window_id"]].add(row["tab_id"])
+    main = max(windows, key=lambda wid: (len(windows[wid]), -wid))
+    for row in rows:
+        if row["window_id"] != main:
+            cli("move-pane-to-new-tab", "--pane-id", str(row["pane_id"]), "--window-id", str(main))
+    workspaces = {row["workspace"] for row in json.loads(cli("list", "--format", "json"))}
+    for workspace in workspaces:
+        if workspace != sys.argv[3]:
+            cli("rename-workspace", "--workspace", workspace, sys.argv[3])
+except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+    sys.exit("devvm: native tab preparation failed: " + str(error))
+GROUP
+}
+
 ensure_host() {
   local host=$1 short=${1%%.*} status forward remote
   command -v "$ek" >/dev/null || die 'Enkaku is missing (ek)'
@@ -198,7 +234,7 @@ devvm add <host> [alias] add a host; restart WezTerm to register its domain
 devvm rm <host>          remove a host from the list; does not end sessions
 
 Remote sessions survive quitting WezTerm while their mux server is alive.
-Detach/merge preserves sessions but turns splits into separate tabs.
+Detach/merge preserves sessions and grouped splits. Initial multi-window gathering may flatten moved splits.
 HELP
     exit 0 ;;
   init)
@@ -219,6 +255,7 @@ PY
   ls|list) hosts list; exit 0 ;;
   add) [[ $# -ge 2 && $# -le 3 ]] || die 'usage: devvm add <host> [alias]'; hosts add "$2" "${3:-}"; printf 'Host added; restart WezTerm to register the new domain.\n'; exit 0 ;;
   rm) [[ $# == 2 ]] || die 'usage: devvm rm <host>'; hosts rm "$2"; exit 0 ;;
+  --group) [[ $# == 3 ]] || die 'usage: devvm --group <host> <workspace>'; host=$(hosts resolve "$2"); group_remote_tabs "$host" "$3"; exit ;;
   --ensure) [[ $# == 2 ]] || die 'missing hostname'; host=$(hosts resolve "$2"); ensure_host "$host"; exit ;;
   menu) die 'the terminal menu has been removed; tabs use the native bottom bar' ;;
   local) action=local; selected='' ;;

@@ -89,7 +89,9 @@ devvm ls                 # Show configured hosts
 Quitting WezTerm preserves remote sessions while their mux server remains alive.
 Local shells end when the GUI quits. Closing a tab ends the processes in that
 tab; use domain detachment when you want remote sessions to keep running.
-Moves preserve processes and scrollback, but flatten splits into separate tabs.
+Direct server attachment preserves processes, scrollback, and existing splits.
+Initial consolidation of several server windows flattens panes moved from other
+windows into separate tabs.
 
 ## Machine-local configuration
 

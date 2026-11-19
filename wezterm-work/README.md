@@ -222,14 +222,15 @@ Enkaku shortcuts and Meta hyperlinks are absent.
 |---|---|
 | Lose the connection or quit the GUI | Remote processes and scrollback remain in the server's mux |
 | `Cmd+Shift+W` | GUI detaches; remote processes remain |
-| `devvm detach` / `merge` | Processes and scrollback remain; moved splits become separate tabs |
+| `devvm detach` / `merge` | Processes, scrollback, and existing splits remain in grouped server windows |
 | Close a remote tab or exit its shell | Processes in that pane/tab end |
 | Restart the server or stop its mux server | Its remote sessions end |
 | Quit WezTerm with local tabs | Local shells end |
 
-Main and detached windows keep local anchor tabs. Detached-window placement and
-split geometry are not saved across moves. Mirrored client windows may be hidden
-in the `devservers-stale` workspace without closing their shared processes.
+Main and detached windows keep local anchor tabs. Native server tabs attach
+directly to the destination window, preserving their existing splits. Initial
+consolidation of multiple server windows still turns panes moved from other
+windows into separate tabs. Detached-window placement is not saved.
 
 The previous terminal-pane footer is retired. Stale `domain-menu` flags are
 ignored, and inherited menu processes are removed on attachment/reload or the
