@@ -45,6 +45,31 @@ config.mouse_bindings = {
     action = act.OpenLinkAtMouseCursor },
 }
 
+-- Handlers that run on every repaint or status tick turn one persistent error into
+-- a traceback per frame, flooding the log and slowing the GUI. Log the first
+-- failure, then disable the handler (falling back to defaults) if it keeps failing;
+-- a config reload re-enables it.
+local GUARD_MAX_FAILURES, GUARD_WINDOW_SECONDS = 50, 10
+local function guarded(name, handler)
+  local failures, window_start, disabled = 0, 0, false
+  return function(...)
+    if disabled then return nil end
+    local ok, result = pcall(handler, ...)
+    if ok then return result end
+    local now = os.time()
+    if now - window_start > GUARD_WINDOW_SECONDS then failures, window_start = 0, now end
+    failures = failures + 1
+    if failures == 1 then
+      wezterm.log_error(name .. ' failed: ' .. tostring(result))
+    elseif failures >= GUARD_MAX_FAILURES then
+      disabled = true
+      wezterm.log_error(name .. ' disabled after ' .. failures .. ' failures in '
+        .. GUARD_WINDOW_SECONDS .. 's; reload the config to re-enable')
+    end
+    return nil
+  end
+end
+
 -- Switch color scheme for remote sessions (Enkaku mux, SSH, etc.)
 local REMOTE_COLOR_SCHEME = 'Catppuccin Mocha'
 
@@ -84,12 +109,14 @@ end
 -- exits. The shell re-emits the IS_REMOTE user var on every prompt (precmd), and
 -- user-var-changed fires immediately on that — reverting the moment you land back
 -- at a local prompt. update-status still covers mid-session, activity-driven cases.
-wezterm.on('update-status', function(window, pane)
+wezterm.on('update-status', guarded('update-status', function(window, pane)
   apply_remote_scheme(window, pane)
-end)
+end))
 
 wezterm.on('user-var-changed', function(window, pane, name, value)
-  if name == 'IS_REMOTE' then
+  -- A background pane's prompt must not repaint the window against update-status,
+  -- which follows the active pane; the two would flip the scheme on every prompt.
+  if name == 'IS_REMOTE' and pane:pane_id() == window:active_pane():pane_id() then
     apply_remote_scheme(window, pane)
   end
 end)
@@ -162,7 +189,7 @@ local function domain_color(key, index)
   return domain_colors[hash % #domain_colors + 1]
 end
 
-wezterm.on('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
+wezterm.on('format-tab-title', guarded('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
   local domain = tab.active_pane and tab.active_pane.domain_name or 'local'
   local label, key, index = domain == 'local' and 'Local' or domain, domain
   if work then label, key, index = work.tab_domain(tab) end
@@ -181,7 +208,7 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
     { Text = ' ' .. title .. ' ' },
     { Background = { Color = tab_background } }, { Foreground = { Color = color } }, { Text = utf8.char(0xe0b0) },
   }
-end)
+end))
 
 config.colors = { tab_bar = {
   background = tab_background,

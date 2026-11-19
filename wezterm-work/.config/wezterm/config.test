@@ -80,6 +80,14 @@ local keys = {{}}
 for _, key in ipairs(config.keys) do keys[key.mods .. ':' .. key.key] = key.action end
 assert(keys['CMD:t'], 'same-domain new tab binding missing')
 assert(keys['CMD|SHIFT:o'], 'host picker missing')
+-- A handler that fails on every repaint must fall back to defaults and then stop
+-- running, rather than logging a traceback per frame.
+local broken = {{tab_index='not a number', is_active=true, active_pane={{domain_name='local', title='shell'}}}}
+local good = {{tab_index=0, is_active=true, active_pane={{domain_name='local', title='shell'}}}}
+assert(render(broken, {{}}, {{}}, config, false, 40) == nil, 'failing tab renderer must fall back to the default title')
+assert(type(render(good, {{}}, {{}}, config, false, 40)) == 'table', 'one failure must not disable the renderer')
+for _ = 1, 60 do render(broken, {{}}, {{}}, config, false, 40) end
+assert(render(good, {{}}, {{}}, config, false, 40) == nil, 'persistently failing renderer was not disabled')
 return config
 ''')
 (root / 'invalid.lua').write_text(f'''
