@@ -1,0 +1,54 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+test_dir=$(mktemp -d /tmp/wezterm-mouse-test.XXXXXX)
+trap 'rm -rf "$test_dir"' EXIT
+export DEVVM_CONFIG_DIR="$test_dir"
+export WEZTERM_MOUSE_TEST_CONFIG="$script_dir/wezterm.lua"
+export WEZTERM_MOUSE_TEST_RESULT="$test_dir/result"
+
+cat >"$test_dir/config.lua" <<'LUA'
+local wezterm = require 'wezterm'
+local ok, result = pcall(function()
+  local config = dofile(os.getenv('WEZTERM_MOUSE_TEST_CONFIG'))
+  local states = {
+    { mouse_reporting = false, alt_screen = false },
+    { mouse_reporting = true, alt_screen = false },
+    { mouse_reporting = false, alt_screen = true },
+    { mouse_reporting = true, alt_screen = true },
+  }
+  for _, event in ipairs({ 'Up', 'Down' }) do
+    for _, state in ipairs(states) do
+      local actions = {}
+      for _, binding in ipairs(config.mouse_bindings) do
+        local trigger = binding.event[event]
+        if trigger and trigger.button == 'Left' and trigger.streak == 1
+          and binding.mods == 'CMD'
+          and (binding.mouse_reporting or false) == state.mouse_reporting
+          and (binding.alt_screen or false) == state.alt_screen then
+          table.insert(actions, binding.action)
+        end
+      end
+      local context = 'Command-click ' .. event .. ' (mouse_reporting='
+        .. tostring(state.mouse_reporting) .. ', alt_screen=' .. tostring(state.alt_screen) .. ')'
+      assert(#actions == 1, context .. ' must have exactly one terminal binding')
+      assert(actions[1] == (event == 'Up' and 'OpenLinkAtMouseCursor' or 'Nop'),
+        context .. ' must open on release and consume the press')
+    end
+  end
+  return config
+end)
+local file = assert(io.open(os.getenv('WEZTERM_MOUSE_TEST_RESULT'), 'w'))
+file:write(ok and 'PASS' or tostring(result))
+file:close()
+return ok and result or {}
+LUA
+
+wezterm --config-file "$test_dir/config.lua" show-keys >/dev/null
+result=$(cat "$WEZTERM_MOUSE_TEST_RESULT")
+if [[ $result != PASS ]]; then
+  printf 'FAIL: %s\n' "$result" >&2
+  exit 1
+fi
+printf 'PASS: Command-click opens on release and consumes the press in all mouse/screen states\n'

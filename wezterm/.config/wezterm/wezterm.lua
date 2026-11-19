@@ -40,10 +40,20 @@ config.hyperlink_rules = {
   },
 }
 
-config.mouse_bindings = {
-  { event = { Up = { streak = 1, button = 'Left' } }, mods = 'CMD',
-    action = act.OpenLinkAtMouseCursor },
-}
+-- TUIs can open links on press; keep both halves of Command-click in the GUI.
+config.mouse_bindings = {}
+for _, mouse_reporting in ipairs { false, true } do
+  for _, alt_screen in ipairs { false, true } do
+    table.insert(config.mouse_bindings, {
+      event = { Down = { streak = 1, button = 'Left' } }, mods = 'CMD',
+      mouse_reporting = mouse_reporting, alt_screen = alt_screen, action = act.Nop,
+    })
+    table.insert(config.mouse_bindings, {
+      event = { Up = { streak = 1, button = 'Left' } }, mods = 'CMD',
+      mouse_reporting = mouse_reporting, alt_screen = alt_screen, action = act.OpenLinkAtMouseCursor,
+    })
+  end
+end
 
 -- Handlers that run on every repaint or status tick turn one persistent error into
 -- a traceback per frame, flooding the log and slowing the GUI. Log the first
