@@ -81,6 +81,27 @@ test "$(readlink "$DEVVM_SOCKET_DIR/devvm124.sock")" = "$DEVVM_STATE_DIR/relays/
 test -S "$DEVVM_STATE_DIR/relays/devvm124.sock"
 grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
 
+# A killed mux server leaves the forward socket in place; ensure must restart it remotely.
+cp "$test_dir/ek" "$test_dir/ek.healthy"
+cp "$test_dir/wezterm" "$test_dir/wezterm.healthy"
+python3 - "$test_dir" <<'PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+ek = root / 'ek'
+ek.write_text(ek.read_text().replace('  run) exit 0 ;;', f'''  run) touch {root}/restarted; echo /run/user/1000/wezterm/sock ;;
+  forward-uds) touch {root}/reforwarded; exit 1 ;;'''))
+(root / 'wezterm').write_text(f'''#!/bin/bash
+[[ $1 == -n && -e {root}/restarted ]] && {{ printf '[]\\n'; exit 0; }}
+exit 1
+''')
+PY
+"$devvm" --ensure devvm124.example.test
+test -e "$test_dir/restarted"
+test ! -e "$test_dir/reforwarded"
+mv "$test_dir/ek.healthy" "$test_dir/ek"
+mv "$test_dir/wezterm.healthy" "$test_dir/wezterm"
+
 printf 'unrelated\n' >"$DEVVM_SOCKET_DIR/devvm124.sock.unrelated"
 rm "$DEVVM_SOCKET_DIR/devvm124.sock"
 printf 'do not replace\n' >"$DEVVM_SOCKET_DIR/devvm124.sock"

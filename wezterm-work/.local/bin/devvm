@@ -153,6 +153,10 @@ GROUP
   python3 -I "$guard" fit "${host%%.*}" "$state_dir" "$wezterm" "$socket_dir/${host%%.*}.sock" "$cols" "$rows" >/dev/null
 }
 
+mux_alive() {
+  WEZTERM_UNIX_SOCKET=$1 "$wezterm" -n cli --no-auto-start list >/dev/null 2>&1
+}
+
 ensure_host() {
   local host=$1 short=${1%%.*} status forward remote relay
   command -v "$ek" >/dev/null || die 'Enkaku is missing (ek)'
@@ -175,19 +179,24 @@ for c in json.load(sys.stdin)["status"]["daemon_status"]["connections"].values()
             if re.fullmatch(r"/run/user/\d+/wezterm/sock", f.get("dst_socket_path", "")):
                 print(f["src_socket_path"]); sys.exit(0)
 ' "$host" <<<"$status")
-  if [[ -z "$forward" || ! -S "$forward" ]]; then
+  # A killed mux server leaves both its remote socket file and the Enkaku
+  # forward behind, so only a successful round trip proves the server is alive.
+  if [[ -z "$forward" || ! -S "$forward" ]] || ! mux_alive "$forward"; then
     remote=$("$ek" run -s "$host" -- '
       export XDG_RUNTIME_DIR=/run/user/$(id -u)
       p=$XDG_RUNTIME_DIR/wezterm/sock
-      if [ ! -S "$p" ]; then
+      alive() { WEZTERM_UNIX_SOCKET=$p wezterm -n cli --no-auto-start list >/dev/null 2>&1; }
+      if ! alive; then
         command -v wezterm-mux-server >/dev/null || exit 3
         wezterm-mux-server --daemonize
-        for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$p" ] && break; sleep 0.5; done
+        for _ in 1 2 3 4 5 6 7 8 9 10; do alive && break; sleep 0.5; done
       fi
-      [ -S "$p" ] && echo "$p"') || return 1
-    [[ -n "$remote" ]] || { printf 'devvm: no mux socket on %s\n' "$host" >&2; return 1; }
-    forward=$("$ek" forward-uds "$remote" "WezTerm devserver $short" "$host" |
-      python3 -c 'import json,sys; s=sys.stdin.read(); print(json.loads(s[s.index("{"):])["src_socket_path"])') || return 1
+      alive && echo "$p"') || return 1
+    [[ -n "$remote" ]] || { printf 'devvm: no mux server on %s\n' "$host" >&2; return 1; }
+    if [[ -z "$forward" || ! -S "$forward" ]]; then
+      forward=$("$ek" forward-uds "$remote" "WezTerm devserver $short" "$host" |
+        python3 -c 'import json,sys; s=sys.stdin.read(); print(json.loads(s[s.index("{"):])["src_socket_path"])') || return 1
+    fi
   fi
   [[ -S "$forward" ]] || { printf 'devvm: invalid forwarded socket for %s\n' "$host" >&2; return 1; }
   relay=$(python3 -I "$guard" ensure "$short" "$forward" "$state_dir") || return 1
