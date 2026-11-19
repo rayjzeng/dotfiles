@@ -202,6 +202,11 @@ local function relocate_host(host, destination, force)
   host.domain = host.domain == host.domains[1] and host.domains[2] or host.domains[1]
   wezterm.GLOBAL['devservers_domain_' .. host.short] = host.domain
   domain = assert(wezterm.mux.get_domain(host.domain))
+  -- Preparation yields to the GUI. Attaching into a window that closed meanwhile
+  -- panics inside WezTerm ("primary window to be valid") and aborts the whole GUI.
+  if not remembered_window(destination:window_id()) then
+    error(host.label .. ': destination window closed while preparing; run devvm again')
+  end
   -- Attach native tabs into the destination; moving client panes leaves their
   -- stored remote tab IDs stale, so later resizes target the wrong server tab.
   domain:attach(destination)

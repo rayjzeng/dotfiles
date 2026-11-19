@@ -38,8 +38,24 @@ with tempfile.TemporaryDirectory(prefix='devvm-integration-', dir='/tmp') as tem
         sockets = root / 'sockets'
         sockets.mkdir()
         env = dict(os.environ, DEVVM_CONFIG_DIR=str(config_dir), DEVVM_SOCKET_DIR=str(sockets),
-                   DEVVM_STATE_DIR=str(root / 'state'), DEVVM_HELPER=str(repo / 'wezterm-work/.local/bin/devvm'),
+                   DEVVM_STATE_DIR=str(root / 'state'), DEVVM_HELPER=str(root / 'bin/devvm'),
                    WEZTERM_LOG='info,config=debug')
+        # The GUI's helper passes through to devvm, except that a flag makes it close the
+        # newest window (a fresh detach destination) while --group prepares the server.
+        (root / 'bin').mkdir()
+        (root / 'bin/devvm-guard').symlink_to(repo / 'wezterm-work/.local/bin/devvm-guard')
+        close_flag = root / 'close-destination'
+        (root / 'bin/devvm').write_text(f'''#!/bin/bash
+if [[ ${{1:-}} == --group && -e {close_flag} ]]; then
+  rm {close_flag}
+  export WEZTERM_UNIX_SOCKET=$HOME/.local/share/wezterm/gui-sock-$PPID
+  for pane in $({wezterm} cli list --format json | python3 -c 'import json,sys; rows=json.load(sys.stdin); newest=max(r["window_id"] for r in rows); print(*(r["pane_id"] for r in rows if r["window_id"]==newest))'); do
+    {wezterm} cli kill-pane --pane-id "$pane"
+  done
+  sleep 0.5
+fi
+exec /bin/bash {repo / 'wezterm-work/.local/bin/devvm'} "$@"
+''')
         forwards = {}
         native_panes = {}
         for short, title in [('host-a', 'DEVVM_ALPHA'), ('host-b', 'DEVVM_BETA')]:
@@ -311,6 +327,15 @@ end)
             assert sum(row['title'] == process_titles[marker] for row in rows) == 1, 'process has multiple GUI layouts'
         assert all(session_windows(marker) == {main} for marker in (alpha_content, beta_content, split_content)), 'original process was replaced or misplaced'
         assert any(p['pane_id'] == personal and p['workspace'] == 'personal' for p in rows), 'unrelated local session changed'
+        # A destination that closes while the server is prepared must fail the request,
+        # not crash the GUI by attaching into a window id that no longer exists.
+        close_flag.touch()
+        failed = subprocess.run([str(repo / 'wezterm-work/.local/bin/devvm'), 'detach', 'beta'], env=env,
+                                capture_output=True, text=True, timeout=45)
+        assert gui.poll() is None, 'GUI crashed attaching into a closed window'
+        assert failed.returncode != 0 and 'closed while preparing' in failed.stderr, failed.stdout + failed.stderr
+        assert not close_flag.exists(), 'the destination-closing hook never ran'
+        print('PASS: a destination closed during preparation fails the request without crashing the GUI')
         new_env = dict(env)
         new_env.pop('WEZTERM_UNIX_SOCKET', None)
         native_env = dict(env, WEZTERM_UNIX_SOCKET=forwards['host-b']['outbound_udses']['test']['src_socket_path'])
