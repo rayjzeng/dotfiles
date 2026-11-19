@@ -163,6 +163,11 @@ their late background cleanup can detach a freshly reused domain ID. Alternating
 IDs avoids that race. GUI pane IDs may change during reconnection; test process
 identity using remote process markers, not only GUI IDs.
 
+Detach does not close the old connection, so each host's socket goes through a
+`devvm-guard` relay that every relocation restarts. Without it, a stale connection
+beside the reattached domain drove a runaway focus loop; see the
+[focus-loop report](../reports/runaway-focus-loop-v1.md).
+
 Legacy mode moves client panes and hides mirrored copies in `devservers-stale`.
 Menu mode initially consolidates windows using the **remote native mux CLI**,
 then switches workspaces rather than moving client panes on each domain change.

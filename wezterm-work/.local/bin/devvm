@@ -8,6 +8,7 @@ host_file="$config_dir/devservers"
 ek=${DEVVM_EK:-ek}
 wezterm=${DEVVM_WEZTERM:-wezterm}
 script_path=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")
+guard=$(dirname -- "$script_path")/devvm-guard
 lock_held=false
 if [[ ${1:-} == --locked ]]; then lock_held=true; shift; fi
 if ! "$lock_held"; then unset DEVVM_PREPARED_HOSTS DEVVM_PREPARED_FAILURE; fi
@@ -112,6 +113,9 @@ MENUS
 
 group_remote_tabs() {
   local host=$1 workspace=$2
+  # WezTerm's detach leaves its connection open; a lingering client beside the
+  # alternate domain's new one can drive a runaway focus loop, so close them all.
+  python3 -I "$guard" restart "${host%%.*}" "$state_dir" >/dev/null || return 1
   clean_remote_menus "$socket_dir/${host%%.*}.sock" || return 1
   python3 - "$wezterm" "$socket_dir/${host%%.*}.sock" "$workspace" <<'GROUP'
 import collections, json, os, subprocess, sys
@@ -147,7 +151,7 @@ GROUP
 }
 
 ensure_host() {
-  local host=$1 short=${1%%.*} status forward remote
+  local host=$1 short=${1%%.*} status forward remote relay
   command -v "$ek" >/dev/null || die 'Enkaku is missing (ek)'
   mkdir -p "$socket_dir"
   if [[ -e "$socket_dir/$short.sock" && ! -L "$socket_dir/$short.sock" ]]; then
@@ -183,7 +187,8 @@ for c in json.load(sys.stdin)["status"]["daemon_status"]["connections"].values()
       python3 -c 'import json,sys; s=sys.stdin.read(); print(json.loads(s[s.index("{"):])["src_socket_path"])') || return 1
   fi
   [[ -S "$forward" ]] || { printf 'devvm: invalid forwarded socket for %s\n' "$host" >&2; return 1; }
-  ln -sfn "$forward" "$socket_dir/$short.sock"
+  relay=$(python3 -I "$guard" ensure "$short" "$forward" "$state_dir") || return 1
+  ln -sfn "$relay" "$socket_dir/$short.sock"
   clean_remote_menus "$forward" || return 1
 }
 

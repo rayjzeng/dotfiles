@@ -66,6 +66,9 @@ REPLY
             assert result == 0, output.decode(errors='replace')
             return output
         finally: os.close(master)
-    run('auth')
+    try:
+        run('auth')
+    finally:
+        subprocess.run(['pkill', '-f', 'devvm-guard relay .* ' + str(root) + '/'])
     print('PASS: interactive authentication receives terminal stdin without blocking local requests')
 PY

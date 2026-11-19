@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 devvm="$script_dir/devvm"
 test_dir=$(mktemp -d /tmp/devvm-test.XXXXXX)
-trap 'result=$?; if ((result != 0)); then cat "$test_dir/output"; fi; rm -rf "$test_dir"' EXIT
+trap 'result=$?; if ((result != 0)); then cat "$test_dir/output"; fi; pkill -f "devvm-guard relay .* $test_dir/" || true; rm -rf "$test_dir"' EXIT
 export DEVVM_CONFIG_DIR="$test_dir/config"
 export DEVVM_SOCKET_DIR="$test_dir/sockets"
 export DEVVM_STATE_DIR="$test_dir/state"
@@ -77,7 +77,9 @@ WT
 chmod +x "$test_dir/wezterm"
 export DEVVM_WEZTERM="$test_dir/wezterm"
 "$devvm" --ensure devvm124.example.test
-test "$(readlink "$DEVVM_SOCKET_DIR/devvm124.sock")" = "$test_dir/mux.sock"
+test "$(readlink "$DEVVM_SOCKET_DIR/devvm124.sock")" = "$DEVVM_STATE_DIR/relays/devvm124.sock"
+test -S "$DEVVM_STATE_DIR/relays/devvm124.sock"
+grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
 
 printf 'unrelated\n' >"$DEVVM_SOCKET_DIR/devvm124.sock.unrelated"
 rm "$DEVVM_SOCKET_DIR/devvm124.sock"

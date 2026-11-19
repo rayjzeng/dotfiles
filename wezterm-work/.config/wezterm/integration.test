@@ -244,7 +244,11 @@ end)
                     windows.add(row['window_id'])
             return windows
 
+        def relay_pid(short):
+            return json.loads((root / 'state/relays' / (short + '.json')).read_text())['pid']
+        before_relocation = relay_pid('host-a')
         run('detach', 'alpha')
+        assert relay_pid('host-a') != before_relocation, 'relocation reused the relay and its stale connections'
         detached = next(iter(wait_for(lambda: session_windows(alpha_content), 'detached original process')))
         assert detached != main
         assert session_windows(alpha_content) == {detached}
@@ -262,6 +266,13 @@ end)
         assert any(p['window_id'] == main and p['workspace'] == 'devservers' for p in listing()), 'local anchor lost'
         run('merge')
         run()
+        relays = root / 'state/relays'
+        for short in ('host-a', 'host-b'):
+            # WezTerm's detach leaves connections open; a stale one beside the live
+            # domain fed the focus loop that pinned the GUI, so relocation must close them.
+            wait_for(lambda: (relays / (short + '.connections')).read_text() == '1',
+                     short + ' has exactly one connection after detach/merge cycles')
+        assert 'PaneFocused notification' not in (root / 'gui.log').read_text(), 'GUI logged focus reconciliation errors'
         rows = listing()
         for marker in (alpha_content, beta_content, split_content):
             os.kill(int(marker.split('=')[1]), 0)
@@ -321,6 +332,7 @@ end)
             print(path.name + ':\n' + path.read_text()[-5000:])
         raise
     finally:
+        subprocess.run(['pkill', '-f', 'devvm-guard relay .* ' + str(root) + '/'])
         for process in reversed(processes):
             process.terminate()
         for process in reversed(processes):

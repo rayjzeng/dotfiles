@@ -232,6 +232,28 @@ directly to the destination window, preserving their existing splits. Initial
 consolidation of multiple server windows still turns panes moved from other
 windows into separate tabs. Detached-window placement is not saved.
 
+### Runaway-loop guards
+
+Each server's socket (`~/.local/share/wezterm-devservers/<host>.sock`) points at a
+small relay, `devvm-guard`, in front of the Enkaku forward. WezTerm does not close
+a connection when it detaches a domain, and a stale connection next to the live one
+once drove a focus loop that pinned the GUI. Every detach/merge therefore restarts
+the host's relay, so stale connections close before the server reattaches.
+
+Two breakers disconnect servers instead of letting the GUI hang. Remote sessions
+survive; reopen the server with `devvm <host>`.
+
+| Breaker | Trips when | Disconnects |
+|---|---|---|
+| Relay | More than 100 focus messages per second for 3 seconds | That server |
+| Watchdog (starts with the GUI) | GUI log grows faster than 256 KB/s for 3 seconds | Every server |
+
+Trips appear as a macOS notification and as a line in
+`~/.local/state/wezterm-devservers/trips.log`. `relays/<host>.connections` there
+shows each server's live connection count, which should be 1 while attached.
+Tab-title and status handlers that keep failing fall back to defaults after 50
+errors in 10 seconds; reload the config to re-enable them.
+
 The previous terminal-pane footer is retired. Stale `domain-menu` flags are
 ignored, and inherited menu processes are removed on attachment/reload or the
 next helper connection. The bar itself creates no terminal panes or resize loop.
@@ -247,6 +269,8 @@ next helper connection. The bar itself creates no terminal panes or resize loop.
 | Powerline separators look wrong | Install/select JetBrainsMono Nerd Font Mono |
 | Connection fails | Check `ek status` and complete any authentication prompt; retry that host |
 | A command reports another command is running | Let the active operation finish, then retry |
+| A server disconnected with a "WezTerm guard" notification | A runaway loop was stopped; check `~/.local/state/wezterm-devservers/trips.log`, then run `devvm <host>` |
+| GUI lags while devservers are attached | Check `relays/<host>.connections` in the state directory; restart WezTerm if any reads above 1 |
 | A GUI request times out | Confirm `wezterm-work` is installed and reload; inspect `~/.local/state/wezterm-devservers/startup.log` if the helper started a GUI |
 
 To uninstall the work tools:
@@ -265,6 +289,7 @@ Run from the repository root:
 ```sh
 bash wezterm-work/.local/bin/devvm.test
 bash wezterm-work/.local/bin/devvm-auth.test
+bash wezterm-work/.local/bin/devvm-guard.test
 bash wezterm-work/.local/bin/devvm-request.test
 bash wezterm-work/.config/wezterm/config.test
 bash wezterm-work/.config/wezterm/integration.test
@@ -277,5 +302,6 @@ do not exercise physical Duo/YubiKey hardware.
 
 For implementation history and the footer diagnosis, see the
 [handoff](../wezterm/docs/handoffs/wezterm-devservers-handoff-v1.md),
-[design](../wezterm/docs/specs/2026-11-16-unified-devservers-design-v1.md), and
-[investigation report](../wezterm/docs/reports/wezterm-devservers-anr-analysis-v1.md).
+[design](../wezterm/docs/specs/2026-11-16-unified-devservers-design-v1.md),
+[investigation report](../wezterm/docs/reports/wezterm-devservers-anr-analysis-v1.md), and
+[focus-loop report](../wezterm/docs/reports/runaway-focus-loop-v1.md).

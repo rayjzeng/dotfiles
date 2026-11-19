@@ -1,0 +1,206 @@
+#!/bin/bash
+set -euo pipefail
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 -I - "$script_dir/devvm-guard" <<'PY'
+import importlib.machinery, importlib.util, json, os, socket, subprocess, sys, tempfile, threading, time
+from pathlib import Path
+
+guard_path = sys.argv[1]
+# Importing the helper must not leave __pycache__ beside it for stow to link.
+sys.dont_write_bytecode = True
+loader = importlib.machinery.SourceFileLoader('devvm_guard', guard_path)
+spec = importlib.util.spec_from_loader('devvm_guard', loader)
+guard = importlib.util.module_from_spec(spec)
+loader.exec_module(guard)
+# /bin keeps ps reachable but hides osascript, so tests never raise notifications.
+env = dict(os.environ, PATH='/bin')
+
+
+def leb128(value):
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def frame(ident, payload=b'', serial=0, compressed=False):
+    body = leb128(serial) + leb128(ident) + payload
+    length = len(body) | ((1 << 63) if compressed else 0)
+    return leb128(length) + body
+
+
+def wait_for(check, what, timeout=10):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if check():
+            return
+        time.sleep(0.05)
+    raise AssertionError('timed out: ' + what)
+
+
+# Frame counting survives arbitrary chunk boundaries, large and compressed payloads.
+stream = (frame(53) + frame(24, b'x' * 200_000) + frame(53, b'\x01', serial=300)
+          + frame(45) + frame(53, b'y' * 70_000, compressed=True))
+for chunk in (1, 2, 7, 4096, len(stream)):
+    counter = guard.PduCounter({53})
+    for i in range(0, len(stream), chunk):
+        counter.feed(stream[i:i + chunk])
+    assert counter.hits == 3 and not counter.lost_sync, (chunk, counter.hits)
+print('PASS: PDU counter tracks focus frames across chunk boundaries and payload sizes')
+
+
+def guard_cli(*args):
+    result = subprocess.run([sys.executable, '-I', guard_path, *map(str, args)], env=env,
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def serve(path, on_connect):
+    server = socket.socket(socket.AF_UNIX)
+    server.bind(str(path))
+    server.listen(16)
+
+    def accept():
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            threading.Thread(target=on_connect, args=(conn,), daemon=True).start()
+    threading.Thread(target=accept, daemon=True).start()
+    return server
+
+
+def echo(conn):
+    with conn:
+        while data := conn.recv(65536):
+            conn.sendall(data)
+
+
+def connect(path):
+    client = socket.socket(socket.AF_UNIX)
+    client.connect(str(path))
+    client.settimeout(5)
+    return client
+
+
+def closed(client):
+    try:
+        return client.recv(1) == b''
+    except socket.timeout:
+        return False
+    except OSError:
+        return True
+
+
+with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory:
+    root = Path(directory)
+    state = root / 'state'
+    try:
+        upstream = root / 'upstream.sock'
+        serve(upstream, echo)
+        listen = Path(guard_cli('ensure', 'hosta', upstream, state))
+        record = state / 'relays/hosta.json'
+        first_pid = json.loads(record.read_text())['pid']
+
+        client = connect(listen)
+        payload = frame(24, os.urandom(300_000))
+        client.sendall(payload)
+        received = b''
+        while len(received) < len(payload):
+            received += client.recv(65536)
+        assert received == payload, 'relay altered the byte stream'
+
+        assert guard_cli('ensure', 'hosta', upstream, state) == str(listen)
+        assert json.loads(record.read_text())['pid'] == first_pid, 'ensure replaced a healthy relay'
+        assert (state / 'relays/hosta.connections').read_text() == '1'
+        assert not closed(client), 'ensure dropped a live connection'
+
+        guard_cli('restart', 'hosta', state)
+        wait_for(lambda: closed(client), 'restart closes connections the old relay carried')
+        assert json.loads(record.read_text())['pid'] != first_pid
+        assert listen.is_socket(), 'a stopping relay removed its successor socket'
+        print('PASS: relay preserves bytes, ensure keeps live connections, restart closes stale ones')
+
+        # Heavy non-focus output must never trip the breaker.
+        client = connect(listen)
+        output = frame(25, b'z' * 60_000)
+        end = time.monotonic() + guard.TRIP_AFTER_SECONDS + 1.5
+        while time.monotonic() < end:
+            client.sendall(output)
+            got = 0
+            while got < len(output):
+                got += len(client.recv(65536))
+        assert not (state / 'trips.log').exists(), 'bulk output tripped the focus breaker'
+        client.close()
+        print('PASS: sustained bulk output does not trip the focus breaker')
+
+        # A server-side PaneFocused flood trips the relay and drops the host's connections.
+        flood_upstream = root / 'flood.sock'
+        def flood(conn):
+            with conn:
+                try:
+                    while True:
+                        conn.sendall(frame(53, b'\x63') * 20)
+                        time.sleep(0.01)
+                except OSError:
+                    pass
+        serve(flood_upstream, flood)
+        listen = Path(guard_cli('ensure', 'hostb', flood_upstream, state))
+        victim = connect(listen)
+        def drain():
+            try:
+                while victim.recv(65536):
+                    pass
+            except OSError:
+                pass
+        threading.Thread(target=drain, daemon=True).start()
+        wait_for(lambda: (state / 'trips.log').exists(), 'focus flood trips the relay',
+                 timeout=guard.TRIP_AFTER_SECONDS + 5)
+        trip = json.loads((state / 'trips.log').read_text().splitlines()[-1])
+        assert trip['guard'] == 'relay' and trip['host'] == 'hostb', trip
+        assert trip['focus_pdus_per_second'] > guard.FOCUS_PDUS_PER_SECOND
+        wait_for(lambda: not listen.exists(), 'tripped relay removes its socket')
+        guard_cli('ensure', 'hostb', flood_upstream, state)
+        assert listen.is_socket(), 'ensure did not restart a tripped relay'
+        print('PASS: focus flood trips the relay, and ensure brings it back')
+
+        # The watchdog trips on a fast-growing GUI log and stops every relay.
+        (state / 'trips.log').unlink()
+        log_dir = root / 'logs'
+        log_dir.mkdir()
+        fake_gui = subprocess.Popen([sys.executable, '-I', '-c', f'''
+import subprocess, sys, time, os
+from pathlib import Path
+log = Path({str(log_dir)!r}) / f"wezterm-gui-log-{{os.getpid()}}.txt"
+log.touch()
+watchdog = subprocess.Popen([sys.executable, '-I', {guard_path!r}, 'watchdog', {str(state)!r}, {str(log_dir)!r}, str(os.getpid())])
+time.sleep(1)  # let the first watchdog take the lock
+second = subprocess.Popen([sys.executable, '-I', {guard_path!r}, 'watchdog', {str(state)!r}, {str(log_dir)!r}, str(os.getpid())])
+assert second.wait(timeout=10) == 0, 'second watchdog did not yield to the first'
+line = b"ERROR wezterm_gui::frontend > Error reconciling PaneFocused notification: pane 99 not found\\n"
+with open(log, 'ab') as out:
+    for _ in range(80):
+        out.write(line * 4000)
+        out.flush()
+        time.sleep(0.1)
+time.sleep(30)
+'''], env=env)
+        try:
+            wait_for(lambda: (state / 'trips.log').exists(), 'watchdog trips on log flood', timeout=20)
+            trip = json.loads((state / 'trips.log').read_text().splitlines()[-1])
+            assert trip['guard'] == 'watchdog' and sorted(trip['relays']) == ['hosta', 'hostb'], trip
+            assert not guard.is_running('hosta', guard.recorded_relay(state, 'hosta'))
+            assert not (state / 'relays/hosta.connections').exists(), 'stopped relay left a stale connection count'
+            print('PASS: watchdog is single-instance, trips on a GUI log flood, and stops every relay')
+        finally:
+            fake_gui.kill()
+            fake_gui.wait()
+    finally:
+        for record in (state / 'relays').glob('*.json'):
+            guard.stop_relay(state, record.stem)
+PY

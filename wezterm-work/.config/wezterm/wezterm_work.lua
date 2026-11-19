@@ -4,6 +4,7 @@ local config_dir = os.getenv('DEVVM_CONFIG_DIR') or wezterm.home_dir .. '/.confi
 local socket_dir = os.getenv('DEVVM_SOCKET_DIR') or wezterm.home_dir .. '/.local/share/wezterm-devservers'
 local state_dir = os.getenv('DEVVM_STATE_DIR') or wezterm.home_dir .. '/.local/state/wezterm-devservers'
 local helper = os.getenv('DEVVM_HELPER') or wezterm.home_dir .. '/.local/bin/devvm'
+local guard = helper:gsub('[^/]*$', '') .. 'devvm-guard'
 local workspace = 'devservers'
 local hosts, by_name, by_domain, by_short = {}, {}, {}, {}
 
@@ -331,7 +332,12 @@ function work.apply_to_config(config)
       end
     end
   end
-  wezterm.on('gui-attached', retire_legacy_menus)
+  wezterm.on('gui-attached', function()
+    -- Outside the GUI so a flooded main thread cannot starve it; one per state dir.
+    wezterm.background_child_process { guard, 'watchdog', state_dir, wezterm.home_dir .. '/.local/share/wezterm',
+      tostring(wezterm.procinfo.pid()) }
+    retire_legacy_menus()
+  end)
   wezterm.on('window-config-reloaded', function()
     if wezterm.GLOBAL.native_tabs_migrated then return end
     wezterm.GLOBAL.native_tabs_migrated = true
