@@ -157,6 +157,22 @@ local function focus(window, pane)
   select(0)
 end
 
+-- The size server tabs must fit before attaching: the destination's on-screen
+-- size, or the largest open window while a fresh destination has no GUI yet.
+local function attach_size(destination)
+  local largest
+  for _, gui in ipairs(wezterm.gui.gui_windows()) do
+    local ok, size, id = pcall(function()
+      return gui:active_tab():get_size(), gui:mux_window():window_id()
+    end)
+    if ok then
+      if id == destination:window_id() then return size end
+      if not largest or size.cols > largest.cols then largest = size end
+    end
+  end
+  return largest
+end
+
 local function relocate_host(host, destination, force)
   local domain = assert(wezterm.mux.get_domain(host.domain), 'restart WezTerm to register ' .. host.label)
   local present = window_panes(destination)
@@ -175,9 +191,13 @@ local function relocate_host(host, destination, force)
     local old = wezterm.mux.get_domain(name)
     if old and old:state() == 'Attached' then old:detach() end
   end
-  local ok, _, stderr = wezterm.run_child_process {
-    '/bin/bash', helper, '--group', host.name, destination:get_workspace(),
-  }
+  local group = { '/bin/bash', helper, '--group', host.name, destination:get_workspace() }
+  local size = attach_size(destination)
+  if size then
+    table.insert(group, tostring(size.cols))
+    table.insert(group, tostring(size.rows))
+  end
+  local ok, _, stderr = wezterm.run_child_process(group)
   assert(ok, host.label .. ': ' .. stderr)
   host.domain = host.domain == host.domains[1] and host.domains[2] or host.domains[1]
   wezterm.GLOBAL['devservers_domain_' .. host.short] = host.domain

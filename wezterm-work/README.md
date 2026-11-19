@@ -248,6 +248,11 @@ survive; reopen the server with `devvm <host>`.
 | Relay | More than 100 focus messages per second for 3 seconds | That server |
 | Watchdog (starts with the GUI) | GUI log grows faster than 256 KB/s for 3 seconds | Every server |
 
+Before a server attaches, any of its tabs larger than the destination window
+is shrunk to fit, keeping pane proportions. A new window adopts its tab's
+stored size, and one 1,496-column tab once overflowed the GPU and crashed the
+GUI. Each fit is logged as `"guard": "fit"`.
+
 Trips appear as a macOS notification and as a line in
 `~/.local/state/wezterm-devservers/trips.log`. `relays/<host>.connections` there
 shows each server's live connection count, which should be 1 while attached.
@@ -303,5 +308,6 @@ do not exercise physical Duo/YubiKey hardware.
 For implementation history and the footer diagnosis, see the
 [handoff](../wezterm/docs/handoffs/wezterm-devservers-handoff-v1.md),
 [design](../wezterm/docs/specs/2026-11-16-unified-devservers-design-v1.md),
-[investigation report](../wezterm/docs/reports/wezterm-devservers-anr-analysis-v1.md), and
-[focus-loop report](../wezterm/docs/reports/runaway-focus-loop-v1.md).
+[investigation report](../wezterm/docs/reports/wezterm-devservers-anr-analysis-v1.md),
+[focus-loop report](../wezterm/docs/reports/runaway-focus-loop-v1.md), and
+[oversized-tab crash report](../wezterm/docs/reports/oversized-tab-crash-v1.md).

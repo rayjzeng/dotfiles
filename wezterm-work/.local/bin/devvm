@@ -112,7 +112,7 @@ MENUS
 }
 
 group_remote_tabs() {
-  local host=$1 workspace=$2
+  local host=$1 workspace=$2 cols=${3:-} rows=${4:-}
   # WezTerm's detach leaves its connection open; a lingering client beside the
   # alternate domain's new one can drive a runaway focus loop, so close them all.
   python3 -I "$guard" restart "${host%%.*}" "$state_dir" >/dev/null || return 1
@@ -148,6 +148,9 @@ try:
 except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
     sys.exit("devvm: native tab preparation failed: " + str(error))
 GROUP
+  [[ -z "$cols" ]] && return 0
+  # A new window adopts its tab's stored size; an oversized server tab crashed the renderer.
+  python3 -I "$guard" fit "${host%%.*}" "$state_dir" "$wezterm" "$socket_dir/${host%%.*}.sock" "$cols" "$rows" >/dev/null
 }
 
 ensure_host() {
@@ -260,7 +263,7 @@ PY
   ls|list) hosts list; exit 0 ;;
   add) [[ $# -ge 2 && $# -le 3 ]] || die 'usage: devvm add <host> [alias]'; hosts add "$2" "${3:-}"; printf 'Host added; restart WezTerm to register the new domain.\n'; exit 0 ;;
   rm) [[ $# == 2 ]] || die 'usage: devvm rm <host>'; hosts rm "$2"; exit 0 ;;
-  --group) [[ $# == 3 ]] || die 'usage: devvm --group <host> <workspace>'; host=$(hosts resolve "$2"); group_remote_tabs "$host" "$3"; exit ;;
+  --group) [[ $# == 3 || $# == 5 ]] || die 'usage: devvm --group <host> <workspace> [<cols> <rows>]'; host=$(hosts resolve "$2"); group_remote_tabs "$host" "${@:3}"; exit ;;
   --ensure) [[ $# == 2 ]] || die 'missing hostname'; host=$(hosts resolve "$2"); ensure_host "$host"; exit ;;
   menu) die 'the terminal menu has been removed; tabs use the native bottom bar' ;;
   local) action=local; selected='' ;;

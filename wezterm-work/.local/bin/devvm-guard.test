@@ -52,6 +52,34 @@ for chunk in (1, 2, 7, 4096, len(stream)):
 print('PASS: PDU counter tracks focus frames across chunk boundaries and payload sizes')
 
 
+def pane(tab, pane_id, left, top, cols, rows):
+    return {'tab_id': tab, 'pane_id': pane_id, 'left_col': left, 'top_row': top, 'is_zoomed': False,
+            'size': {'cols': cols, 'rows': rows, 'pixel_width': cols * 14, 'pixel_height': rows * 32, 'dpi': 144}}
+
+
+def layout_after(panes, plan):
+    """Recompute pane geometry the way the server's split tree would after a plan."""
+    sizes = {p_id: (cols, rows) for _, p_id, rows, cols, *_ in plan}
+    return {p['pane_id']: sizes.get(p['pane_id'], (p['size']['cols'], p['size']['rows'])) for p in panes}
+
+
+# The live crash layout: three side-by-side panes totalling 1,496 columns.
+live = [pane(12, 5, 0, 0, 480, 101), pane(12, 27, 481, 0, 801, 101), pane(12, 26, 1283, 0, 213, 101)]
+sizes = layout_after(live, guard.fit_plan(live, 427, 99))
+assert sum(cols for cols, _ in sizes.values()) + 2 == 427, sizes
+assert all(rows == 99 for _, rows in sizes.values()), sizes
+assert sizes[27][0] > sizes[5][0] > sizes[26][0], 'fitting must keep pane proportions'
+# Left pane beside a right column split top/bottom: borders must still line up.
+nested = [pane(1, 1, 0, 0, 900, 120), pane(1, 2, 901, 0, 600, 59), pane(1, 3, 901, 60, 600, 60)]
+sizes = layout_after(nested, guard.fit_plan(nested, 300, 80))
+assert sizes[1][0] + 1 + sizes[2][0] == 300 and sizes[2][0] == sizes[3][0], sizes
+assert sizes[2][1] + 1 + sizes[3][1] == 80 and sizes[1][1] == 80, sizes
+fitting = [pane(2, 4, 0, 0, 200, 50), pane(2, 5, 201, 0, 100, 50)]
+assert guard.fit_plan(fitting + live, 427, 101) and not guard.fit_plan(fitting, 427, 101), \
+    'tabs that already fit must be left alone'
+print('PASS: fit plan shrinks oversized tabs proportionally with aligned split borders')
+
+
 def guard_cli(*args):
     result = subprocess.run([sys.executable, '-I', guard_path, *map(str, args)], env=env,
                             capture_output=True, text=True, timeout=20)
@@ -168,6 +196,59 @@ with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory
         guard_cli('ensure', 'hostb', flood_upstream, state)
         assert listen.is_socket(), 'ensure did not restart a tripped relay'
         print('PASS: focus flood trips the relay, and ensure brings it back')
+
+        # fit shrinks real oversized tabs, including zoomed ones, without replacing panes.
+        wezterm = '/Applications/WezTerm.app/Contents/MacOS/wezterm'
+        mux_socket = root / 'mux/sock'
+        mux_socket.parent.mkdir()
+        (root / 'mux/config.lua').write_text("return {unix_domains={{name='u',socket_path=" + repr(str(mux_socket))
+                                             + "}},default_prog={'/bin/sh'}}\n")
+        mux = subprocess.Popen([wezterm + '-mux-server', '--config-file', str(root / 'mux/config.lua')],
+                               env=dict(env, XDG_RUNTIME_DIR=str(root / 'mux')),
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            mux_env = dict(env, WEZTERM_UNIX_SOCKET=str(mux_socket))
+            def mux_cli(*args):
+                return subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=mux_env,
+                                      capture_output=True, text=True, timeout=10)
+            wait_for(lambda: mux_cli('list').returncode == 0, 'private mux server')
+            def tab_panes(tab):
+                return [p for p in json.loads(mux_cli('list', '--format', 'json').stdout) if p['tab_id'] == tab]
+            first = int(mux_cli('spawn', '--new-window').stdout)
+            second = int(mux_cli('split-pane', '--pane-id', str(first), '--right').stdout)
+            third = int(mux_cli('split-pane', '--pane-id', str(second), '--bottom').stdout)
+            first_row = next(p for p in json.loads(mux_cli('list', '--format', 'json').stdout) if p['pane_id'] == first)
+            split_tab = first_row['tab_id']
+            zoomed = int(mux_cli('spawn', '--window-id', str(first_row['window_id'])).stdout)
+            mux_cli('split-pane', '--pane-id', str(zoomed), '--right')
+            zoomed_tab = next(p['tab_id'] for p in json.loads(mux_cli('list', '--format', 'json').stdout)
+                              if p['pane_id'] == zoomed)
+            for tab in (split_tab, zoomed_tab):
+                panes = tab_panes(tab)
+                width = max(p['left_col'] + p['size']['cols'] for p in panes)
+                guard.send_resizes(mux_socket, [(tab, p['pane_id'], p['size']['rows'],
+                                                 p['size']['cols'] * 1496 // width, 0, 0, 144) for p in panes])
+            mux_cli('zoom-pane', '--pane-id', str(zoomed), '--zoom')
+            assert max(p['left_col'] + p['size']['cols'] for p in tab_panes(split_tab)) > 1000, 'inflation failed'
+            before = {p['pane_id'] for tab in (split_tab, zoomed_tab) for p in tab_panes(tab)}
+            fitted = guard_cli('fit', 'hostf', state, wezterm, mux_socket, 427, 20)
+            assert f'fitted tab {split_tab} ' in fitted and f'fitted tab {zoomed_tab} ' in fitted, fitted
+            fits = [json.loads(line) for line in (state / 'trips.log').read_text().splitlines()]
+            fits = {f['tab'] for f in fits if f['guard'] == 'fit' and f['host'] == 'hostf'}
+            assert {split_tab, zoomed_tab} <= fits, fits
+            for tab in (split_tab, zoomed_tab):
+                panes = tab_panes(tab)
+                assert max(p['left_col'] + p['size']['cols'] for p in panes) <= 427, panes
+                assert max(p['top_row'] + p['size']['rows'] for p in panes) <= 20, panes
+            left, right = sorted((p for p in tab_panes(split_tab) if p['top_row'] == 0), key=lambda p: p['left_col'])
+            assert right['left_col'] == left['size']['cols'] + 1, 'split borders no longer line up'
+            assert {p['pane_id'] for tab in (split_tab, zoomed_tab) for p in tab_panes(tab)} == before, \
+                'fitting replaced panes'
+            assert guard_cli('fit', 'hostf', state, wezterm, mux_socket, 427, 20) == '', 'fit touched tabs that already fit'
+            print('PASS: fit shrinks oversized and zoomed server tabs in place, then leaves them alone')
+        finally:
+            mux.terminate()
+            mux.wait()
 
         # The watchdog trips on a fast-growing GUI log and stops every relay.
         (state / 'trips.log').unlink()

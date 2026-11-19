@@ -3,9 +3,10 @@ set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 python3 - "$script_dir" <<'PY'
-import json, os, re, subprocess, sys, tempfile, time
+import importlib.machinery, json, os, re, subprocess, sys, tempfile, time, types
 from pathlib import Path
 
+sys.dont_write_bytecode = True
 source = Path(sys.argv[1])
 repo = source.parents[2]
 app = Path('/Applications/WezTerm.app/Contents/MacOS')
@@ -131,7 +132,38 @@ else:
         wait_for(lambda: sum(p['title'] == 'dotfiles-domain-menu' for p in listing()) == 2, 'old local footers before reload')
         gui_config.write_text(gui_config.read_text().replace('return c', "require('wezterm').GLOBAL.native_tabs_migrated=nil; return c"))
         wait_for(lambda: not any(p['title'] == 'dotfiles-domain-menu' for p in listing()), 'in-place reload removes local footers')
+        native_socket = forwards['host-a']['outbound_udses']['test']['src_socket_path']
+        def native_alpha():
+            return json.loads(subprocess.check_output([wezterm, '-n', 'cli', 'list', '--format', 'json'], text=True,
+                                                      env=dict(env, WEZTERM_UNIX_SOCKET=native_socket)))
+        def widest(rows):
+            tabs = {}
+            for row in rows:
+                tabs[row['tab_id']] = max(tabs.get(row['tab_id'], 0), row['left_col'] + row['size']['cols'])
+            return max(tabs.values())
+        # A stale pane resize can widen a whole server tab; attaching one wider than
+        # the GPU viewport crashed the renderer, so attaching must fit it first. Inflate
+        # while no GUI is attached: an attached GUI shrinks the tab back by itself.
+        loader = importlib.machinery.SourceFileLoader('devvm_guard', str(repo / 'wezterm-work/.local/bin/devvm-guard'))
+        guard = types.ModuleType(loader.name)
+        loader.exec_module(guard)
+        # Grouping moves panes from other server windows into fresh default-size tabs,
+        # so inflate every tab: the one left in the kept window must still be fitted.
+        inflated = {}
+        for row in native_alpha():
+            inflated.setdefault(row['tab_id'], []).append(row)
+        for tab, members in inflated.items():
+            width = widest(members)
+            guard.send_resizes(native_socket, [(tab, row['pane_id'], row['size']['rows'],
+                                                row['size']['cols'] * 1496 // width, 0, 0, 144) for row in members])
+        assert widest(native_alpha()) > 1000, 'fixture tab was not inflated'
         run()
+        # Once attached, the GUI resizes server tabs to its window anyway, so only the
+        # guard's record proves the tab was fitted before the attach could adopt it.
+        trips = root / 'state/trips.log'
+        fits = [json.loads(line) for line in trips.read_text().splitlines()] if trips.exists() else []
+        assert any(f['guard'] == 'fit' and f['host'] == 'host-a' and int(f['before'].split('x')[0]) > 1000
+                   for f in fits), ('oversized tab was not fitted', fits)
         rows = wait_for(lambda: [p for p in listing() if p['workspace'] == 'devservers' and p['title'].startswith('DEVVM_')],
                         'attached test panes')
         alpha = next(p['pane_id'] for p in rows if p['title'] == 'DEVVM_ALPHA')

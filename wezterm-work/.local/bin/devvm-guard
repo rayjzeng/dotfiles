@@ -9,11 +9,16 @@ relay     Sits between a WezTerm unix domain and its Enkaku forward. WezTerm's
           focus PDUs run away, closing the host's connections.
 watchdog  Watches the GUI log from outside the GUI, because a flooded GUI main
           thread cannot run Lua timers. A runaway error loop trips every relay.
+fit       Shrinks server tabs larger than the attaching window before attach. A
+          new GUI window adopts its tab's stored size, and a 1,496-column tab
+          (one stale pane resize widens the whole tab) overflowed the GPU
+          viewport and aborted the renderer.
 """
-import argparse, asyncio, fcntl, json, os, shutil, signal, subprocess, sys, time
+import argparse, asyncio, fcntl, json, os, shutil, signal, socket, subprocess, sys, time
 from pathlib import Path
 
 SET_FOCUSED_PANE, PANE_FOCUSED = 45, 53
+ERROR_RESPONSE, UNIT_RESPONSE, RESIZE = 0, 10, 14
 # Human-driven focus changes are a few per second; the observed loop ran ~4,500/s.
 FOCUS_PDUS_PER_SECOND = 100
 # Normal GUI logging is a few lines per minute; the observed loop wrote ~2.5 MB/s.
@@ -31,6 +36,103 @@ def read_leb128(buffer, offset):
             return value, offset
         shift += 7
     return None, offset
+
+
+def leb128(value):
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def scaled_span(start, length, total, target):
+    """Map a pane's span onto target cells, keeping shared split borders aligned.
+
+    Scaling each span's start and its end-plus-separator with one function means
+    neighbours agree on their border, so the split tree stays consistent.
+    """
+    scale = (target + 1) / (total + 1)
+    new_start = round(start * scale)
+    new_end = round((start + length + 1) * scale) - 1
+    return max(1, new_end - new_start)
+
+
+def fit_plan(panes, cols, rows):
+    """Return (tab_id, pane_id, rows, cols, pixel_width, pixel_height, dpi) resizes
+    that shrink every tab larger than cols x rows to fit, as `wezterm cli list` rows."""
+    extents = tab_extents(panes)
+    plan = []
+    for pane in panes:
+        width, height = extents[pane['tab_id']]
+        if width <= cols and height <= rows:
+            continue
+        size = pane['size']
+        new_cols = scaled_span(pane['left_col'], size['cols'], width, min(width, cols))
+        new_rows = scaled_span(pane['top_row'], size['rows'], height, min(height, rows))
+        cell_width = size['pixel_width'] // max(size['cols'], 1)
+        cell_height = size['pixel_height'] // max(size['rows'], 1)
+        plan.append((pane['tab_id'], pane['pane_id'], new_rows, new_cols,
+                     new_cols * cell_width, new_rows * cell_height, size['dpi']))
+    return plan
+
+
+def send_resizes(socket_path, plan):
+    """Apply a fit_plan through the mux protocol, as a GUI does when its window resizes."""
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.connect(str(socket_path))
+        connection.settimeout(10)
+        reader = connection.makefile('rb')
+        for serial, resize in enumerate(plan, start=1):
+            body = leb128(serial) + leb128(RESIZE) + b''.join(leb128(v) for v in resize)
+            connection.sendall(leb128(len(body)) + body)
+            while True:
+                header = reader.read(1)
+                length_bytes = bytearray(header)
+                while length_bytes[-1] & 0x80:
+                    length_bytes += reader.read(1)
+                length, _ = read_leb128(length_bytes, 0)
+                payload = reader.read(length & ~(1 << 63))
+                reply_serial, offset = read_leb128(payload, 0)
+                ident, _ = read_leb128(payload, offset)
+                if reply_serial:  # serial 0 is an unsolicited notification
+                    break
+            if ident != UNIT_RESPONSE:
+                raise RuntimeError(f'server rejected resizing pane {resize[1]} (reply {ident})')
+
+
+def tab_extents(panes):
+    """Return {tab_id: (cols, rows)} for `wezterm cli list` rows."""
+    extents = {}
+    for pane in panes:
+        cols, rows = extents.get(pane['tab_id'], (0, 0))
+        extents[pane['tab_id']] = (max(cols, pane['left_col'] + pane['size']['cols']),
+                                   max(rows, pane['top_row'] + pane['size']['rows']))
+    return extents
+
+
+def fit_tabs(wezterm, socket_path, cols, rows):
+    """Shrink oversized tabs on the mux at socket_path; return {tab_id: (cols, rows)} before fitting."""
+    env = dict(os.environ, WEZTERM_UNIX_SOCKET=str(socket_path))
+    env.pop('WEZTERM_PANE', None)
+
+    def cli(*args):
+        return subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=env, check=True,
+                              capture_output=True, text=True, timeout=10).stdout
+
+    panes = json.loads(cli('list', '--format', 'json'))
+    extents = tab_extents(panes)
+    oversized = {tab: extents[tab] for tab, *_ in fit_plan(panes, cols, rows)}
+    # The server skips rebuilding a zoomed tab's size, so unzoom before resizing.
+    zoomed = [p for p in panes if p['tab_id'] in oversized and p['is_zoomed']]
+    for pane in zoomed:
+        cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--unzoom')
+    if zoomed:
+        panes = json.loads(cli('list', '--format', 'json'))
+    send_resizes(socket_path, fit_plan(panes, cols, rows))
+    return oversized
 
 
 class PduCounter:
@@ -84,9 +186,13 @@ class Breaker:
         return self.streak >= TRIP_AFTER_SECONDS
 
 
-def record_trip(state_dir, **fields):
+def log_guard_event(state_dir, **fields):
     with open(state_dir / 'trips.log', 'a') as log:
         log.write(json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S'), **fields}) + '\n')
+
+
+def record_trip(state_dir, **fields):
+    log_guard_event(state_dir, **fields)
     if shutil.which('osascript'):
         message = fields['reason'].replace('\\', '').replace('"', "'")
         subprocess.run(['osascript', '-e', f'display notification "{message}" with title "WezTerm guard"'],
@@ -259,9 +365,22 @@ def main():
     run_watchdog.add_argument('state_dir', type=Path)
     run_watchdog.add_argument('log_dir', type=Path)
     run_watchdog.add_argument('gui_pid', type=int)
+    run_fit = commands.add_parser('fit')
+    run_fit.add_argument('host')
+    run_fit.add_argument('state_dir', type=Path)
+    run_fit.add_argument('wezterm')
+    run_fit.add_argument('socket', type=Path)
+    run_fit.add_argument('cols', type=int)
+    run_fit.add_argument('rows', type=int)
     args = parser.parse_args()
     if args.command == 'watchdog':
         return watchdog(args.state_dir, args.log_dir, args.gui_pid)
+    if args.command == 'fit':
+        for tab, (cols, rows) in sorted(fit_tabs(args.wezterm, args.socket, args.cols, args.rows).items()):
+            log_guard_event(args.state_dir, guard='fit', host=args.host, tab=tab,
+                            before=f'{cols}x{rows}', limit=f'{args.cols}x{args.rows}')
+            print(f'fitted tab {tab} from {cols}x{rows} to fit {args.cols}x{args.rows}')
+        return 0
     listen = relay_paths(args.state_dir, args.host)[0]
     if args.command == 'relay':
         signal.signal(signal.SIGTERM, lambda *_: (remove_endpoints(listen), sys.exit(0)))
