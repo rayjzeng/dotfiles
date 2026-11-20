@@ -9,7 +9,8 @@ local workspace = 'devservers'
 local hosts, by_name, by_domain, by_short = {}, {}, {}, {}
 
 local validation_error
-local seen, aliases = {}, {}
+-- Short names and aliases share one namespace, or a selector could match two hosts.
+local taken = {}
 local reserved = { all = true, init = true, ls = true, list = true, add = true,
   rm = true, open = true, detach = true, merge = true, help = true, menu = true, ['local'] = true }
 local file = io.open(config_dir .. '/devservers', 'r')
@@ -21,13 +22,13 @@ if file then
     if name then
       local short = name:match('^[^.]+')
       if #fields > 2 or not name:match('^[A-Za-z0-9][A-Za-z0-9.%-]*$')
-        or not short or seen[short] or (alias ~= '' and (aliases[alias] or reserved[alias]
+        or not short or taken[short] or (alias ~= '' and ((alias ~= short and taken[alias]) or reserved[alias]
           or not alias:match('^[A-Za-z0-9][A-Za-z0-9_%-]*$'))) then
         validation_error = 'Invalid devservers entry: ' .. line .. '. Fix the list with devvm ls.'
         break
       end
-      seen[short] = true
-      if alias ~= '' then aliases[alias] = true end
+      taken[short] = true
+      if alias ~= '' then taken[alias] = true end
       local base = 'devserver:' .. short
       local host = { name = name, short = short, label = alias ~= '' and alias or short,
         color_index = #hosts + 1,

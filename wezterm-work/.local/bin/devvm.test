@@ -43,6 +43,18 @@ cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
 expect_failure add 'bad/host' third
 cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
 
+# Short names and aliases share one namespace, or a selector resolves to two hosts.
+expect_failure add devvm125.example.test devvm124
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure add primary.example.test
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+mkdir "$test_dir/colliding-config"
+printf 'alpha.example.test beta\nbeta.example.test gamma\n' >"$test_dir/colliding-config/devservers"
+DEVVM_CONFIG_DIR="$test_dir/colliding-config" expect_failure ls
+grep -q 'duplicate hostname or alias' "$test_dir/output"
+printf 'alpha.example.test alpha\n' >"$test_dir/colliding-config/devservers"
+DEVVM_CONFIG_DIR="$test_dir/colliding-config" "$devvm" ls >/dev/null
+
 "$devvm" add devvm125.example.test third
 "$devvm" rm third
 ! grep -q devvm125 "$DEVVM_CONFIG_DIR/devservers"

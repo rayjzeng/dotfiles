@@ -125,7 +125,7 @@ test -L "$test_dir/target/.local/bin/devvm"
 test ! -e "$test_dir/target/.local/bin/devvm.test"
 test ! -e "$test_dir/target/.config/wezterm/config.test"
 test ! -e "$test_dir/target/.config/wezterm/integration.test"
-for entries in '.. broken' $'same.one.test a\nsame.two.test b' 'bad/host alias extra' 'devvm123.example.test all'; do
+for entries in '.. broken' $'same.one.test a\nsame.two.test b' $'alpha.example.test beta\nbeta.example.test gamma' 'bad/host alias extra' 'devvm123.example.test all'; do
   printf '%s\n' "$entries" >"$DEVVM_CONFIG_DIR/devservers"
   wezterm --config-file "$test_dir/invalid.lua" show-keys >/dev/null
   if [[ $(cat "$test_dir/invalid.result") != PASS ]]; then
