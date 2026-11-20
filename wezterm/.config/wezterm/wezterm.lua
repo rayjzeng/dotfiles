@@ -204,6 +204,10 @@ local function tab_domain(tab)
   return domain == 'local' and 'Local' or domain, domain
 end
 
+local function mux_tab_domain(tab)
+  return tab_domain { active_pane = { domain_name = tab:active_pane():get_domain_name() } }
+end
+
 wezterm.on('format-tab-title', guarded('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
   local label, key, index = tab_domain(tab)
   local color = domain_color(key, index)
@@ -244,17 +248,106 @@ wezterm.on('trigger-vi-with-scrollback', function(window, pane)
   os.remove(name)
 end)
 
+-- WezTerm handles tab-bar clicks natively, so config can't add tab dragging; this
+-- picker jumps to any tab in the workspace or moves the current tab between windows.
+local function workspace_windows()
+  local workspace = wezterm.mux.get_active_workspace()
+  local windows = {}
+  for _, window in ipairs(wezterm.mux.all_windows()) do
+    if window:get_workspace() == workspace then table.insert(windows, window) end
+  end
+  table.sort(windows, function(a, b) return a:window_id() < b:window_id() end)
+  return windows
+end
+
+local function mux_tab_title(tab)
+  local title = tab:get_title()
+  return #title > 0 and title or tab:active_pane():get_title()
+end
+
+local function tab_picker_choices(windows, current_window_id)
+  local choices = {}
+  for w, window in ipairs(windows) do
+    for t, tab in ipairs(window:tabs()) do
+      table.insert(choices, { id = 'tab:' .. tab:tab_id(), label = 'Window ' .. w .. ' · Tab ' .. t .. ' · '
+        .. mux_tab_domain(tab) .. ' · ' .. mux_tab_title(tab) })
+    end
+  end
+  for w, window in ipairs(windows) do
+    if window:window_id() ~= current_window_id then
+      table.insert(choices, { id = 'window:' .. window:window_id(),
+        label = 'Move this tab to window ' .. w .. ' · ' .. mux_tab_title(window:active_tab()) })
+    end
+  end
+  table.insert(choices, { id = 'new-window', label = 'Move this tab to a new window' })
+  return choices
+end
+
+-- Moving client panes of a mux domain leaves their stored remote tab IDs stale
+-- (see relocate_host in wezterm_work.lua), so only plain local tabs may move.
+local function cross_window_move_error(tab)
+  local domain = tab:active_pane():get_domain_name()
+  if work and work.is_managed_domain(domain) then
+    return 'Devserver tabs move with their server: use devvm detach or devvm open'
+  end
+  if domain ~= 'local' then return 'Only local tabs can move to another window' end
+  if #tab:panes() > 1 then return 'Unsplit this tab before moving it to another window' end
+end
+
+-- No Lua API moves a pane into an existing window. Several GUIs may be running, so
+-- address this GUI's socket rather than whichever one the CLI would pick.
+local function move_pane_to_window(pane, window_id)
+  local socket = wezterm.home_dir .. '/.local/share/wezterm/gui-sock-' .. wezterm.procinfo.pid()
+  local ok, _, stderr = wezterm.run_child_process { '/usr/bin/env', 'WEZTERM_UNIX_SOCKET=' .. socket,
+    wezterm.executable_dir .. '/wezterm', '-n', 'cli', '--no-auto-start', 'move-pane-to-new-tab',
+    '--pane-id', tostring(pane:pane_id()), '--window-id', tostring(window_id) }
+  return ok, stderr
+end
+
+local function focus_tab(window, tab)
+  tab:activate()
+  window:gui_window():focus()
+end
+
+local function show_tab_picker(window, pane)
+  local source = window:active_tab()
+  window:perform_action(act.InputSelector { title = 'Tabs', fuzzy = true,
+    choices = tab_picker_choices(workspace_windows(), window:window_id()),
+    action = wezterm.action_callback(function(gui, _, id)
+      if not id then return end
+      local tab_id = id:match('^tab:(%d+)$')
+      if tab_id then
+        local tab = wezterm.mux.get_tab(tonumber(tab_id))
+        return focus_tab(tab:window(), tab)
+      end
+      local refusal = cross_window_move_error(source)
+      if refusal then return gui:toast_notification('WezTerm', refusal, nil, 4000) end
+      if id == 'new-window' then
+        local tab, destination = source:active_pane():move_to_new_window(wezterm.mux.get_active_workspace())
+        return focus_tab(destination, tab)
+      end
+      local destination = wezterm.mux.get_window(tonumber(id:match('^window:(%d+)$')))
+      local ok, stderr = move_pane_to_window(source:active_pane(), destination:window_id())
+      if not ok then return gui:toast_notification('WezTerm', 'Moving the tab failed: ' .. stderr, nil, 4000) end
+      local tabs = destination:tabs()
+      focus_tab(destination, tabs[#tabs])
+    end),
+  }, pane)
+end
+
 -- Keybindings
 config.keys = {
   { key = 'P', mods = 'CMD|SHIFT', action = act.ActivateCommandPalette },
   { key = 't', mods = 'CMD', action = act.SpawnTab 'CurrentPaneDomain' },
-  { key = 't', mods = 'CMD|SHIFT', action = act.ShowTabNavigator },
+  { key = 't', mods = 'CMD|SHIFT', action = wezterm.action_callback(show_tab_picker) },
   { key = 'd', mods = 'CMD', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
   { key = 'd', mods = 'CMD|SHIFT', action = act.SplitVertical { domain = 'CurrentPaneDomain' } },
   { key = 'LeftArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Left' },
   { key = 'RightArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Right' },
   { key = 'UpArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Up' },
   { key = 'DownArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Down' },
+  { key = 'LeftArrow', mods = 'CMD|OPT|SHIFT', action = act.MoveTabRelative(-1) },
+  { key = 'RightArrow', mods = 'CMD|OPT|SHIFT', action = act.MoveTabRelative(1) },
   { key = '[', mods = 'CMD', action = act.ActivatePaneDirection 'Prev' },
   { key = ']', mods = 'CMD', action = act.ActivatePaneDirection 'Next' },
   { key = 'UpArrow', mods = 'SHIFT', action = act.ScrollToPrompt(-1) },
