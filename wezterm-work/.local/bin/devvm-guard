@@ -256,13 +256,24 @@ async def relay(listen, upstream, host, state_dir):
 
 
 def watchdog(state_dir, log_dir, gui):
-    state_dir.mkdir(parents=True, exist_ok=True)
-    lock = open(state_dir / 'watchdog.lock', 'a')
+    # One watchdog per GUI, not per state dir: a restarted or second GUI must not be
+    # turned away by a watchdog that is still watching a different GUI process.
+    lock_path = state_dir / 'watchdogs' / f'{gui}.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = open(lock_path, 'a')
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return 0
-    log = log_dir / f'wezterm-gui-log-{gui}.txt'
+    try:
+        watch_log(state_dir, log_dir / f'wezterm-gui-log-{gui}.txt', gui)
+    finally:
+        lock_path.unlink(missing_ok=True)
+    return 0
+
+
+def watch_log(state_dir, log, gui):
+    """Stop every relay whenever the GUI's log floods, until the GUI exits."""
     breaker, last = Breaker(LOG_BYTES_PER_SECOND), None
     while is_alive(gui):
         time.sleep(1)
@@ -278,7 +289,6 @@ def watchdog(state_dir, log_dir, gui):
                     reason=f'WezTerm error loop ({rate // 1024} KB/s of log) — disconnected '
                            f'{len(relays)} devserver(s); restart WezTerm if lag persists')
         breaker.streak = -60  # give the GUI a minute to drain before judging again
-    return 0
 
 
 def is_alive(pid):

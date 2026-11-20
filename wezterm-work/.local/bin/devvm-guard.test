@@ -288,6 +288,23 @@ time.sleep(30)
             assert not guard.is_running('hosta', guard.recorded_relay(state, 'hosta'))
             assert not (state / 'relays/hosta.connections').exists(), 'stopped relay left a stale connection count'
             print('PASS: watchdog is single-instance, trips on a GUI log flood, and stops every relay')
+
+            # A GUI started while another GUI's watchdog runs (a quick restart, or a
+            # second process) must get its own watchdog, which ends with that GUI.
+            successor = subprocess.Popen(['sleep', '30'])
+            watcher = subprocess.Popen([sys.executable, '-I', guard_path, 'watchdog', str(state), str(log_dir),
+                                        str(successor.pid)], env=env)
+            try:
+                time.sleep(2)
+                assert watcher.poll() is None, 'watchdog abandoned a GUI because another GUI was watched'
+                successor.kill()
+                successor.wait()
+                assert watcher.wait(timeout=5) == 0
+                assert not (state / f'watchdogs/{successor.pid}.lock').exists(), 'watchdog left its lock behind'
+                print('PASS: each GUI gets its own watchdog, which exits and cleans up with its GUI')
+            finally:
+                successor.kill()
+                watcher.kill()
         finally:
             fake_gui.kill()
             fake_gui.wait()
