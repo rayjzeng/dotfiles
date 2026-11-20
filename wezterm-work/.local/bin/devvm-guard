@@ -24,6 +24,9 @@ FOCUS_PDUS_PER_SECOND = 100
 # Normal GUI logging is a few lines per minute; the observed loop wrote ~2.5 MB/s.
 LOG_BYTES_PER_SECOND = 256 * 1024
 TRIP_AFTER_SECONDS = 3
+# Each refit absorbs the previous pass's clamping overshoot; one or two passes suffice
+# unless a tab has more panes than the limit has cells, which can never fit.
+FIT_PASSES = 4
 
 
 def read_leb128(buffer, offset):
@@ -131,8 +134,15 @@ def fit_tabs(wezterm, socket_path, cols, rows):
         cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--unzoom')
     if zoomed:
         panes = json.loads(cli('list', '--format', 'json'))
-    send_resizes(socket_path, fit_plan(panes, cols, rows))
-    return oversized
+    # Panes too narrow to shrink are clamped to one cell, which can push a scaled
+    # layout past the limit, so refit from the server's real geometry until it fits.
+    for _ in range(FIT_PASSES):
+        plan = fit_plan(panes, cols, rows)
+        if not plan:
+            return oversized
+        send_resizes(socket_path, plan)
+        panes = json.loads(cli('list', '--format', 'json'))
+    raise RuntimeError(f'tabs still exceed {cols}x{rows} after {FIT_PASSES} fitting passes')
 
 
 class PduCounter:

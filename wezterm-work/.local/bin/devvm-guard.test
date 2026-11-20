@@ -256,6 +256,20 @@ with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory
                 'fitting replaced panes'
             assert guard_cli('fit', 'hostf', state, wezterm, mux_socket, 427, 20) == '', 'fit touched tabs that already fit'
             print('PASS: fit shrinks oversized and zoomed server tabs in place, then leaves them alone')
+
+            # Panes too narrow to shrink are clamped to one cell, pushing the scaled
+            # layout past the limit; fit must keep going until the tab really fits.
+            narrow = int(mux_cli('spawn', '--window-id', str(first_row['window_id'])).stdout)
+            middle = int(mux_cli('split-pane', '--pane-id', str(narrow), '--right').stdout)
+            wide = int(mux_cli('split-pane', '--pane-id', str(middle), '--right').stdout)
+            uneven_tab = next(p['tab_id'] for p in json.loads(mux_cli('list', '--format', 'json').stdout)
+                              if p['pane_id'] == narrow)
+            guard.send_resizes(mux_socket, [(uneven_tab, pane_id, 20, cols, cols * 14, 640, 144)
+                                            for pane_id, cols in ((narrow, 1), (middle, 1), (wide, 20))])
+            assert sorted(p['size']['cols'] for p in tab_panes(uneven_tab)) == [1, 1, 20], tab_panes(uneven_tab)
+            guard_cli('fit', 'hostf', state, wezterm, mux_socket, 20, 20)
+            assert max(p['left_col'] + p['size']['cols'] for p in tab_panes(uneven_tab)) <= 20, tab_panes(uneven_tab)
+            print('PASS: fit keeps refitting until tabs with clamped narrow panes fit')
         finally:
             mux.terminate()
             mux.wait()
