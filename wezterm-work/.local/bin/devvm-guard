@@ -329,19 +329,27 @@ def stop_relay(state_dir, host):
     relay = recorded_relay(state_dir, host)
     if not relay or not is_running(host, relay):
         return False
-    os.kill(relay['pid'], signal.SIGTERM)
-    deadline = time.monotonic() + 2
-    while is_running(host, relay):
-        if time.monotonic() >= deadline:
-            os.kill(relay['pid'], signal.SIGKILL)
-            break
-        time.sleep(0.02)
+    try:
+        os.kill(relay['pid'], signal.SIGTERM)
+        deadline = time.monotonic() + 2
+        while is_running(host, relay):
+            if time.monotonic() >= deadline:
+                os.kill(relay['pid'], signal.SIGKILL)
+                break
+            time.sleep(0.02)
+    except ProcessLookupError:
+        pass  # it exited on its own after the liveness check
     return True
 
 
 def stop_relays(state_dir):
-    return [record.stem for record in sorted((state_dir / 'relays').glob('*.json'))
-            if stop_relay(state_dir, record.stem)]
+    """Stop every relay, each under its host lock so no replacement interleaves."""
+    stopped = []
+    for record in sorted((state_dir / 'relays').glob('*.json')):
+        with lock_host(state_dir, record.stem):
+            if stop_relay(state_dir, record.stem):
+                stopped.append(record.stem)
+    return stopped
 
 
 def lock_host(state_dir, host):

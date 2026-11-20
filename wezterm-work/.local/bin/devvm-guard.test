@@ -308,6 +308,29 @@ time.sleep(30)
         finally:
             fake_gui.kill()
             fake_gui.wait()
+
+        # A relay that exits between the liveness check and the kill must not abort
+        # shutdown, and shutdown must wait out a replacement holding the host's lock.
+        guard_cli('ensure', 'raceb', upstream, state)
+        exited = subprocess.Popen(['true'])
+        exited.wait()
+        (state / 'relays/racea.json').write_text(json.dumps({'pid': exited.pid, 'upstream': str(upstream)}))
+        checked = guard.is_running
+        guard.is_running = lambda host, relay: host == 'racea' or checked(host, relay)
+        replacing = guard.lock_host(state, 'raceb')
+        stopped = []
+        shutdown = threading.Thread(target=lambda: stopped.extend(guard.stop_relays(state)))
+        try:
+            shutdown.start()
+            time.sleep(0.5)
+            assert checked('raceb', guard.recorded_relay(state, 'raceb')), 'shutdown ignored a held host lock'
+            replacing.close()
+            shutdown.join(timeout=10)
+        finally:
+            guard.is_running = checked
+        assert stopped == ['racea', 'raceb'], stopped
+        assert not checked('raceb', guard.recorded_relay(state, 'raceb')), 'a racing exit aborted shutdown'
+        print('PASS: shutdown tolerates relays that exit mid-stop and waits for in-progress replacements')
     finally:
         for record in (state / 'relays').glob('*.json'):
             guard.stop_relay(state, record.stem)
