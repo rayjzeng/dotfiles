@@ -276,8 +276,9 @@ local function receive_request(_, pane, name, path)
   if path:sub(1, #prefix) ~= prefix or path:find('/%.%./') then return end
   local completed = io.open(path .. '.result', 'r')
   if completed then completed:close(); return end
-  -- Retries must not replay a merge while its first remote operation is pending.
-  if wezterm.GLOBAL.devvm_inflight == path then return end
+  -- One request at a time, even after its caller is cancelled and releases its lock:
+  -- relocations must not overlap. A waiting request's pane keeps resending until free.
+  if wezterm.GLOBAL.devvm_inflight then return end
   wezterm.GLOBAL.devvm_inflight = path
   -- Relocating several hosts can outlast any fixed deadline, so devvm keeps the
   -- request lock for as long as this GUI lives instead of timing out mid-relocation.

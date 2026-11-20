@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 python3 - "$script_dir" <<'PY'
-import importlib.machinery, json, os, re, subprocess, sys, tempfile, time, types
+import importlib.machinery, json, os, re, signal, subprocess, sys, tempfile, time, types
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -40,12 +40,19 @@ with tempfile.TemporaryDirectory(prefix='devvm-integration-', dir='/tmp') as tem
         env = dict(os.environ, DEVVM_CONFIG_DIR=str(config_dir), DEVVM_SOCKET_DIR=str(sockets),
                    DEVVM_STATE_DIR=str(root / 'state'), DEVVM_HELPER=str(root / 'bin/devvm'),
                    WEZTERM_LOG='info,config=debug')
-        # The GUI's helper passes through to devvm, except that a flag makes it close the
-        # newest window (a fresh detach destination) while --group prepares the server.
+        # The GUI's helper passes through to devvm, except that flags make --group close
+        # the newest window (a fresh detach destination) or stall while preparing the server.
         (root / 'bin').mkdir()
         (root / 'bin/devvm-guard').symlink_to(repo / 'wezterm-work/.local/bin/devvm-guard')
         close_flag = root / 'close-destination'
+        slow_flag = root / 'slow-group'
         (root / 'bin/devvm').write_text(f'''#!/bin/bash
+if [[ ${{1:-}} == --group && -e {slow_flag} ]]; then
+  rm {slow_flag}
+  touch {root}/group-started
+  sleep 4
+  touch {root}/group-finished
+fi
 if [[ ${{1:-}} == --group && -e {close_flag} ]]; then
   rm {close_flag}
   export WEZTERM_UNIX_SOCKET=$HOME/.local/share/wezterm/gui-sock-$PPID
@@ -336,6 +343,22 @@ end)
         assert failed.returncode != 0 and 'closed while preparing' in failed.stderr, failed.stdout + failed.stderr
         assert not close_flag.exists(), 'the destination-closing hook never ran'
         print('PASS: a destination closed during preparation fails the request without crashing the GUI')
+        # Cancelling devvm (Ctrl+C) releases its lock but not the GUI's accepted relocation,
+        # so the GUI itself must hold later requests until that relocation finishes.
+        slow_flag.touch()
+        cancelled = subprocess.Popen([str(repo / 'wezterm-work/.local/bin/devvm'), 'detach', 'alpha'], env=env,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        wait_for((root / 'group-started').exists, 'slow relocation started')
+        os.killpg(cancelled.pid, signal.SIGINT)
+        cancelled.wait(timeout=5)
+        run('local')
+        assert (root / 'group-finished').exists(), 'a request overlapped a cancelled relocation'
+        wait_for(lambda: subprocess.run(['pgrep', '-f', '--request ' + str(root / 'state')],
+                                        capture_output=True).returncode != 0,
+                 'cancelled request pane exits once its request is gone')
+        wait_for(lambda: session_windows(alpha_content) - {main}, 'cancelled detach completes')
+        run('merge', 'alpha')
+        print('PASS: a cancelled relocation still blocks later requests, and its request pane exits')
         new_env = dict(env)
         new_env.pop('WEZTERM_UNIX_SOCKET', None)
         native_env = dict(env, WEZTERM_UNIX_SOCKET=forwards['host-b']['outbound_udses']['test']['src_socket_path'])

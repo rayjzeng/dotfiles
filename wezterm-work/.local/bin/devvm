@@ -254,7 +254,8 @@ wait_for_result() {
   local request=$1 gui
   gui=$(<"$request.accepted")
   while [[ ! -f "$request.result" ]]; do
-    kill -0 "$gui" 2>/dev/null || return 1
+    # A cancelled caller deletes its request, so no result can ever arrive.
+    [[ -f "$request" ]] && kill -0 "$gui" 2>/dev/null || return 1
     sleep 0.1
   done
 }
