@@ -154,7 +154,17 @@ GROUP
 }
 
 mux_alive() {
-  WEZTERM_UNIX_SOCKET=$1 "$wezterm" -n cli --no-auto-start list >/dev/null 2>&1
+  # An Enkaku forward keeps accepting after its remote end is gone, so an unbounded
+  # probe would block on it forever instead of trying the next candidate.
+  python3 - "$wezterm" "$1" <<'ALIVE'
+import os, subprocess, sys
+env = dict(os.environ, WEZTERM_UNIX_SOCKET=sys.argv[2])
+try:
+    sys.exit(subprocess.run([sys.argv[1], '-n', 'cli', '--no-auto-start', 'list'], env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode)
+except subprocess.TimeoutExpired:
+    sys.exit(1)
+ALIVE
 }
 
 first_answering() {
@@ -199,7 +209,7 @@ for c in json.load(sys.stdin)["status"]["daemon_status"]["connections"].values()
     remote=$("$ek" run -s "$host" -- '
       export XDG_RUNTIME_DIR=/run/user/$(id -u)
       p=$XDG_RUNTIME_DIR/wezterm/sock
-      alive() { WEZTERM_UNIX_SOCKET=$p wezterm -n cli --no-auto-start list >/dev/null 2>&1; }
+      alive() { WEZTERM_UNIX_SOCKET=$p timeout 5 wezterm -n cli --no-auto-start list >/dev/null 2>&1; }
       if ! alive; then
         command -v wezterm-mux-server >/dev/null || exit 3
         wezterm-mux-server --daemonize

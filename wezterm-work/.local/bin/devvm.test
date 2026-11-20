@@ -134,6 +134,21 @@ rm -f "$test_dir/restarted"
 "$devvm" --ensure devvm124.example.test
 test ! -e "$test_dir/restarted"
 grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
+
+# A forward whose remote end is gone still accepts, so a probe of it must time
+# out rather than block ensure from reaching the live forward behind it.
+cat >"$test_dir/wezterm" <<WT
+#!/bin/bash
+[[ \$1 == -n && \$WEZTERM_UNIX_SOCKET == $test_dir/dead.sock ]] && exec sleep 60
+[[ \$1 == -n && \$WEZTERM_UNIX_SOCKET == $test_dir/mux.sock ]] && { printf '[]\n'; exit 0; }
+exit 1
+WT
+python3 - "$devvm" <<'PY'
+import subprocess, sys
+subprocess.run(['/bin/bash', sys.argv[1], '--ensure', 'devvm124.example.test'], check=True, timeout=15)
+PY
+test ! -e "$test_dir/restarted"
+grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
 mv "$test_dir/ek.healthy" "$test_dir/ek"
 mv "$test_dir/wezterm.healthy" "$test_dir/wezterm"
 
