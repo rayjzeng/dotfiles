@@ -197,10 +197,15 @@ local function domain_color(key, index)
   return domain_colors[hash % #domain_colors + 1]
 end
 
-wezterm.on('format-tab-title', guarded('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
+-- Returns the tab's display label, grouping key, and optional color index.
+local function tab_domain(tab)
+  if work then return work.tab_domain(tab) end
   local domain = tab.active_pane and tab.active_pane.domain_name or 'local'
-  local label, key, index = domain == 'local' and 'Local' or domain, domain
-  if work then label, key, index = work.tab_domain(tab) end
+  return domain == 'local' and 'Local' or domain, domain
+end
+
+wezterm.on('format-tab-title', guarded('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
+  local label, key, index = tab_domain(tab)
   local color = domain_color(key, index)
   local background = (tab.is_active or hover) and color or tab_background
   local foreground = (tab.is_active or hover) and tab_background or color
