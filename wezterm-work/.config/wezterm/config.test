@@ -96,7 +96,18 @@ assert(not config.unix_domains or #config.unix_domains == 0, 'invalid host list 
 assert(config.window_decorations == 'RESIZE', 'bad host list broke shared configuration')
 return config
 ''')
-for name in ('personal', 'work', 'invalid'):
+# Machine-local font overrides must reach the tab bar, not just terminal text.
+(root / 'local').mkdir()
+(root / 'local/wezterm_local.lua').write_text("return { font_size = 15.0 }\n")
+(root / 'local/local.lua').write_text(f'''
+package.path = {str(root / 'local/?.lua')!r} .. ';' .. package.path
+local config = dofile({source!r})
+assert(config.font_size == 15.0, 'local override was not loaded')
+assert(config.window_frame.font_size == 15.0, 'tab bar ignored the local font size')
+assert(config.window_frame.font == config.font, 'tab bar does not use the terminal font')
+return config
+''')
+for name in ('personal', 'work', 'invalid', 'local/local'):
     path = root / (name + '.lua')
     body = path.read_text()
     path.write_text('local ok, result = pcall(function()\n' + body + '\nend)\n'
@@ -104,11 +115,13 @@ for name in ('personal', 'work', 'invalid'):
         + 'f:write(ok and "PASS" or tostring(result)); f:close()\n'
         + 'return ok and result or {}\n')
 PY
-wezterm --config-file "$test_dir/personal.lua" show-keys >/dev/null
-if [[ $(cat "$test_dir/personal.result") != PASS ]]; then
-  cat "$test_dir/personal.result" >&2
-  exit 1
-fi
+for name in personal local/local; do
+  wezterm --config-file "$test_dir/$name.lua" show-keys >/dev/null
+  if [[ $(cat "$test_dir/$name.result") != PASS ]]; then
+    cat "$test_dir/$name.result" >&2
+    exit 1
+  fi
+done
 ln -s "$script_dir/wezterm_work.lua" "$DEVVM_CONFIG_DIR/wezterm_work.lua"
 # A stale prototype flag must never load the removed terminal-footer code.
 touch "$DEVVM_CONFIG_DIR/domain-menu"

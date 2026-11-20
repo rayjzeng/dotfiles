@@ -26,8 +26,6 @@ config.use_fancy_tab_bar = false
 config.tab_bar_at_bottom = true
 config.tab_max_width = 40
 config.window_frame = {
-  font = config.font,
-  font_size = config.font_size,
   active_titlebar_bg = '#282a36',
   inactive_titlebar_bg = '#282a36',
 }
@@ -291,5 +289,10 @@ local ok, local_overrides = pcall(require, 'wezterm_local')
 if ok and type(local_overrides) == 'table' then
   merge(config, local_overrides)
 end
+
+-- Derived after local overrides so a local font change reaches the tab bar too,
+-- unless the frame sets its own font.
+config.window_frame.font = config.window_frame.font or config.font
+config.window_frame.font_size = config.window_frame.font_size or config.font_size
 
 return config
