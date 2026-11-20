@@ -154,6 +154,16 @@ with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory
         assert listen.is_socket(), 'a stopping relay removed its successor socket'
         print('PASS: relay preserves bytes, ensure keeps live connections, restart closes stale ones')
 
+        # Concurrent ensures must leave one relay, the recorded one, so restart can reach it.
+        racers = [subprocess.Popen([sys.executable, '-I', guard_path, 'ensure', 'hostc', str(upstream), str(state)],
+                                   env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for _ in range(8)]
+        for racer in racers:
+            assert racer.wait(timeout=20) == 0, racer.stderr.read()
+        ps = subprocess.run(['ps', '-ax', '-o', 'pid=,command='], capture_output=True, text=True).stdout
+        relays = [int(line.split()[0]) for line in ps.splitlines() if 'devvm-guard relay hostc ' in line and line.endswith(f' {state}')]
+        assert relays == [guard.recorded_relay(state, 'hostc')['pid']], f'unrecorded relays survived: {relays}'
+        print('PASS: concurrent ensures leave exactly one recorded relay')
+
         # Heavy non-focus output must never trip the breaker.
         client = connect(listen)
         output = frame(25, b'z' * 60_000)
@@ -274,7 +284,7 @@ time.sleep(30)
         try:
             wait_for(lambda: (state / 'trips.log').exists(), 'watchdog trips on log flood', timeout=20)
             trip = json.loads((state / 'trips.log').read_text().splitlines()[-1])
-            assert trip['guard'] == 'watchdog' and sorted(trip['relays']) == ['hosta', 'hostb'], trip
+            assert trip['guard'] == 'watchdog' and sorted(trip['relays']) == ['hosta', 'hostb', 'hostc'], trip
             assert not guard.is_running('hosta', guard.recorded_relay(state, 'hosta'))
             assert not (state / 'relays/hosta.connections').exists(), 'stopped relay left a stale connection count'
             print('PASS: watchdog is single-instance, trips on a GUI log flood, and stops every relay')

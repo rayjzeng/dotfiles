@@ -334,6 +334,19 @@ def stop_relays(state_dir):
             if stop_relay(state_dir, record.stem)]
 
 
+def lock_host(state_dir, host):
+    """Hold host's relay lock until the returned file closes.
+
+    Unserialized replacements can orphan a relay whose PID was never recorded,
+    and restart cannot close the stale connections such a relay carries.
+    """
+    path = relay_paths(state_dir, host)[1].with_suffix('.lock')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = open(path, 'a')
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+
 def start_relay(state_dir, host, upstream):
     """Replace host's relay, closing every connection the old one carried."""
     stop_relay(state_dir, host)
@@ -385,16 +398,17 @@ def main():
     if args.command == 'relay':
         signal.signal(signal.SIGTERM, lambda *_: (remove_endpoints(listen), sys.exit(0)))
         return asyncio.run(relay(listen, args.upstream, args.host, args.state_dir))
-    current = recorded_relay(args.state_dir, args.host)
-    if args.command == 'ensure':
-        healthy = (current and current['upstream'] == str(args.upstream)
-                   and is_running(args.host, current) and listen.is_socket())
-        if not healthy:
-            start_relay(args.state_dir, args.host, args.upstream)
-    else:
-        if not current:
-            raise SystemExit(f'devvm-guard: no relay recorded for {args.host}; run devvm {args.host}')
-        start_relay(args.state_dir, args.host, current['upstream'])
+    with lock_host(args.state_dir, args.host):
+        current = recorded_relay(args.state_dir, args.host)
+        if args.command == 'ensure':
+            healthy = (current and current['upstream'] == str(args.upstream)
+                       and is_running(args.host, current) and listen.is_socket())
+            if not healthy:
+                start_relay(args.state_dir, args.host, args.upstream)
+        else:
+            if not current:
+                raise SystemExit(f'devvm-guard: no relay recorded for {args.host}; run devvm {args.host}')
+            start_relay(args.state_dir, args.host, current['upstream'])
     print(listen)
     return 0
 
