@@ -254,6 +254,8 @@ with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory
             assert right['left_col'] == left['size']['cols'] + 1, 'split borders no longer line up'
             assert {p['pane_id'] for tab in (split_tab, zoomed_tab) for p in tab_panes(tab)} == before, \
                 'fitting replaced panes'
+            assert [p['pane_id'] for p in tab_panes(zoomed_tab) if p['is_zoomed']] == [zoomed], \
+                'fitting lost the zoom it had to undo'
             assert guard_cli('fit', 'hostf', state, wezterm, mux_socket, 427, 20) == '', 'fit touched tabs that already fit'
             print('PASS: fit shrinks oversized and zoomed server tabs in place, then leaves them alone')
 

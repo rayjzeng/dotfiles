@@ -132,17 +132,21 @@ def fit_tabs(wezterm, socket_path, cols, rows):
     zoomed = [p for p in panes if p['tab_id'] in oversized and p['is_zoomed']]
     for pane in zoomed:
         cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--unzoom')
-    if zoomed:
-        panes = json.loads(cli('list', '--format', 'json'))
-    # Panes too narrow to shrink are clamped to one cell, which can push a scaled
-    # layout past the limit, so refit from the server's real geometry until it fits.
-    for _ in range(FIT_PASSES):
-        plan = fit_plan(panes, cols, rows)
-        if not plan:
-            return oversized
-        send_resizes(socket_path, plan)
-        panes = json.loads(cli('list', '--format', 'json'))
-    raise RuntimeError(f'tabs still exceed {cols}x{rows} after {FIT_PASSES} fitting passes')
+    try:
+        if zoomed:
+            panes = json.loads(cli('list', '--format', 'json'))
+        # Panes too narrow to shrink are clamped to one cell, which can push a scaled
+        # layout past the limit, so refit from the server's real geometry until it fits.
+        for _ in range(FIT_PASSES):
+            plan = fit_plan(panes, cols, rows)
+            if not plan:
+                return oversized
+            send_resizes(socket_path, plan)
+            panes = json.loads(cli('list', '--format', 'json'))
+        raise RuntimeError(f'tabs still exceed {cols}x{rows} after {FIT_PASSES} fitting passes')
+    finally:
+        for pane in zoomed:
+            cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--zoom')
 
 
 class PduCounter:
