@@ -239,3 +239,21 @@ DEVVM_TEST_GUI_LIFETIME=40 DEVVM_TEST_REPLY_DELAY=31 "$devvm" >"$test_dir/output
 DEVVM_TEST_GUI_LIFETIME=0.5 expect_failure
 grep -q 'WezTerm exited before finishing the request' "$test_dir/output"
 printf 'PASS: devvm keeps a long relocation request until the GUI replies or exits\n'
+
+# A GUI that accepts but never answers must fail the command, not hold the request
+# lock forever, and must not be mistaken for no GUI (which would start a second one).
+cat >"$test_dir/wezterm" <<WT
+#!/bin/bash
+[[ \$1 == cli ]] && exec sleep 60
+[[ \$1 == start ]] && touch "$test_dir/second-gui"
+exit 1
+WT
+python3 - "$devvm" "$test_dir/output" <<'PY'
+import subprocess, sys
+with open(sys.argv[2], 'w') as output:
+    result = subprocess.run(['/bin/bash', sys.argv[1], 'local'], stdout=output, stderr=output, timeout=20)
+assert result.returncode != 0, 'devvm succeeded against an unresponsive GUI'
+PY
+grep -q 'WezTerm is not responding' "$test_dir/output"
+test ! -e "$test_dir/second-gui"
+printf 'PASS: devvm fails fast on an unresponsive GUI instead of holding the request lock\n'

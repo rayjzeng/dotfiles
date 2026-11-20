@@ -167,6 +167,18 @@ except subprocess.TimeoutExpired:
 ALIVE
 }
 
+# Runs a local GUI cli command, exiting 124 if the GUI accepts but never answers:
+# discovery runs under requests.lock, so an unbounded call would hold it forever.
+gui_cli() {
+  python3 - "$wezterm" "$@" <<'CLI'
+import subprocess, sys
+try:
+    sys.exit(subprocess.run([sys.argv[1], 'cli', '--no-auto-start', *sys.argv[2:]], timeout=10).returncode)
+except subprocess.TimeoutExpired:
+    sys.exit(124)
+CLI
+}
+
 first_answering() {
   local candidate
   for candidate in "$@"; do
@@ -362,11 +374,15 @@ import json, sys
 from pathlib import Path
 Path(sys.argv[1]).write_text(json.dumps({'action': sys.argv[2], 'hosts': sys.argv[3:]}))
 PY
-if "$wezterm" cli --no-auto-start list --format json >/dev/null 2>&1; then
-  request_workspace=$("$wezterm" cli --no-auto-start list-clients --format json | python3 -c 'import json,sys; print(next((c["workspace"] for c in json.load(sys.stdin)), "devservers"))')
+unresponsive='WezTerm is not responding; restart it and run devvm again'
+if gui_cli list --format json >/dev/null 2>&1; then gui_status=0; else gui_status=$?; fi
+((gui_status != 124)) || die "$unresponsive"
+if ((gui_status == 0)); then
+  clients=$(gui_cli list-clients --format json) || die "$unresponsive"
+  request_workspace=$(python3 -c 'import json,sys; print(next((c["workspace"] for c in json.load(sys.stdin)), "devservers"))' <<<"$clients")
   # A mixed window can route a local spawn through its active remote domain.
-  "$wezterm" cli --no-auto-start spawn --domain-name local --new-window --workspace "$request_workspace" --cwd "$HOME" \
-    -- /bin/bash "$script_path" --request "$request" >/dev/null
+  gui_cli spawn --domain-name local --new-window --workspace "$request_workspace" --cwd "$HOME" \
+    -- /bin/bash "$script_path" --request "$request" >/dev/null || die "$unresponsive"
 else
   "$wezterm" start --always-new-process --workspace devservers --cwd "$HOME" \
     -- /bin/bash "$script_path" --request "$request" >"$state_dir/startup.log" 2>&1 &
