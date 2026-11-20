@@ -18,7 +18,7 @@ import argparse, asyncio, fcntl, json, os, shutil, signal, socket, subprocess, s
 from pathlib import Path
 
 SET_FOCUSED_PANE, PANE_FOCUSED = 45, 53
-ERROR_RESPONSE, UNIT_RESPONSE, RESIZE = 0, 10, 14
+UNIT_RESPONSE, RESIZE = 10, 14
 # Human-driven focus changes are a few per second; the observed loop ran ~4,500/s.
 FOCUS_PDUS_PER_SECOND = 100
 # Normal GUI logging is a few lines per minute; the observed loop wrote ~2.5 MB/s.

@@ -367,7 +367,7 @@ function work.apply_to_config(config)
     end
   end
   wezterm.on('gui-attached', function()
-    -- Outside the GUI so a flooded main thread cannot starve it; one per state dir.
+    -- Outside the GUI so a flooded main thread cannot starve it; one per GUI.
     wezterm.background_child_process { guard, 'watchdog', state_dir, wezterm.home_dir .. '/.local/share/wezterm',
       tostring(wezterm.procinfo.pid()) }
     retire_legacy_menus()
