@@ -1,0 +1,125 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "$script_dir" <<'PY'
+import json, os, subprocess, sys, tempfile, time
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+source = Path(sys.argv[1])
+app = Path('/Applications/WezTerm.app/Contents/MacOS')
+wezterm = str(app / 'wezterm')
+processes = []
+
+def wait_for(check, description, timeout=15):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = check()
+        if value:
+            return value
+        time.sleep(0.1)
+    raise AssertionError('timed out: ' + description)
+
+with tempfile.TemporaryDirectory(prefix='tab-grouping-integration-', dir='/tmp') as temp:
+    root = Path(temp)
+    try:
+        # An empty DEVVM_CONFIG_DIR keeps the work module out, so tabs group by raw domain.
+        config_dir = root / 'config'
+        config_dir.mkdir()
+        env = dict(os.environ, DEVVM_CONFIG_DIR=str(config_dir), XDG_RUNTIME_DIR=str(root))
+        # Each pane titles itself, so tabs adopted from the remote server are named too.
+        def titled(name):
+            return ['/bin/sh', '-c', f"printf '\\033]0;{name}\\007'; while :; do sleep 60; done"]
+
+        def lua_list(args):
+            return '{' + ','.join(json.dumps(arg) for arg in args) + '}'
+
+        socket = root / 'remote/sock'
+        socket.parent.mkdir()
+        remote_config = root / 'remote/config.lua'
+        remote_config.write_text('return {unix_domains={{name="unix",socket_path=' + json.dumps(str(socket))
+                                 + '}},default_prog=' + lua_list(titled('remote0')) + '}\n')
+        log = (root / 'remote.log').open('w')
+        processes.append(subprocess.Popen([str(app / 'wezterm-mux-server'), '--config-file', str(remote_config)],
+                                          stdout=log, stderr=log, env=env))
+        wait_for(socket.exists, 'remote mux socket')
+
+        gui_config = config_dir / 'gui.lua'
+        gui_config.write_text('local w=require("wezterm"); local c=dofile(' + json.dumps(str(source / 'wezterm.lua'))
+                              + '); c.default_prog=' + lua_list(titled('local1'))
+                              + '; c.unix_domains={{name="remote",socket_path=' + json.dumps(str(socket))
+                              + ',no_serve_automatically=true}}; '
+                              + 'w.on("update-status",function(g) local path=' + json.dumps(str(root / 'active-'))
+                              + ' .. g:mux_window():window_id(); local f=assert(io.open(path .. ".tmp","w")); '
+                              + 'f:write(g:mux_window():active_tab():active_pane():get_title()); f:close(); '
+                              + 'os.rename(path .. ".tmp",path) end); return c\n')
+        log = (root / 'gui.log').open('w')
+        gui = subprocess.Popen([str(app / 'wezterm-gui'), '--config-file', str(gui_config), 'start',
+                                '--always-new-process', '--class', 'tab-grouping-integration-' + str(os.getpid())],
+                               stdout=log, stderr=log, env=env)
+        processes.append(gui)
+        gui_socket = Path.home() / '.local/share/wezterm' / ('gui-sock-' + str(gui.pid))
+        wait_for(gui_socket.exists, 'isolated GUI socket')
+        env['WEZTERM_UNIX_SOCKET'] = str(gui_socket)
+
+        def cli(*args):
+            p = subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=env,
+                               capture_output=True, text=True, timeout=15)
+            assert p.returncode == 0, p.stderr
+            return p.stdout
+
+        def listing():
+            return json.loads(cli('list', '--format', 'json'))
+
+        first = wait_for(listing, 'initial local tab')[0]
+        window = first['window_id']
+
+        def spawn(name, domain):
+            cli('spawn', '--window-id', str(window), '--domain-name', domain, *titled(name))
+
+        def order():
+            return ' '.join(p['title'] for p in listing() if p['window_id'] == window)
+
+        def active():
+            path = root / ('active-' + str(window))
+            return path.exists() and path.read_text()
+
+        def settle(expected, focused, context):
+            def state():
+                return order(), active() if focused else None
+            started = time.monotonic()
+            try:
+                wait_for(lambda: state() == (expected, focused), context)
+            except AssertionError:
+                raise AssertionError(f'{context}: want {(expected, focused)}, have {state()}') from None
+            print(f'{context}: grouped in {time.monotonic() - started:.1f}s')
+            # Later status ticks must leave a settled window alone.
+            time.sleep(2.5)
+            assert state() == (expected, focused), f'{context}: drifted to {state()}'
+
+        # Attaching the domain also adopts the server's own tab, and WezTerm focuses that
+        # tab on its own schedule, racing the spawn's focus; no move is needed here, so
+        # focus is WezTerm's choice and only the order is ours to check.
+        spawn('remote1', 'remote')
+        settle('local1 remote0 remote1', None, 'a new domain opens at the end')
+        cli('activate-tab', '--tab-id', str(first['tab_id']))
+        spawn('local2', 'local')
+        settle('local1 local2 remote0 remote1', 'local2', 'a detected tab joins its domain group')
+        spawn('remote2', 'remote')
+        spawn('local3', 'local')
+        settle('local1 local2 local3 remote0 remote1 remote2', 'local3', 'tabs from several domains group without loss')
+        print('PASS: tabs spawned outside Cmd+T are regrouped by domain in a live GUI')
+    except Exception:
+        for path in root.glob('*.log'):
+            print(path.name + ':\n' + path.read_text()[-5000:])
+        raise
+    finally:
+        for process in reversed(processes):
+            process.terminate()
+        for process in reversed(processes):
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait()
+PY

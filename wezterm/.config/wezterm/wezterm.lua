@@ -233,6 +233,84 @@ config.colors = { tab_bar = {
   new_tab_hover = { bg_color = '#6272a4', fg_color = '#f8f8f2' },
 } }
 
+local function index_of(list, value)
+  for i, item in ipairs(list) do
+    if item == value then return i end
+  end
+end
+
+-- Where a tab with `key` belongs among `keys`, as a 0-based insert position: after
+-- the first same-domain run that contains or follows the focused tab, wrapping to
+-- the first run, so a domain split across groups grows the group you're working in.
+local function grouped_insert_position(keys, focused, key)
+  local first_run_end
+  for i = 1, #keys do
+    if keys[i] == key and keys[i + 1] ~= key then
+      if i >= focused then return i end
+      first_run_end = first_run_end or i
+    end
+  end
+  return first_run_end or #keys
+end
+
+-- WezTerm has no tab-created event, so each window remembers the tabs it has
+-- seen; anything new is moved into its domain group relative to the tab that was
+-- focused before it appeared.
+local seen_tabs = {}
+
+local function group_new_tabs(window, pane)
+  local mux_window = window:mux_window()
+  local order, ids, keys, unseen = {}, {}, {}, {}
+  local previous = seen_tabs[mux_window:window_id()]
+  for _, tab in ipairs(mux_window:tabs()) do
+    local id = tab:tab_id()
+    table.insert(order, id)
+    ids[id] = true
+    keys[id] = select(2, mux_tab_domain(tab))
+    if previous and not previous.ids[id] then table.insert(unseen, id) end
+  end
+  local active = mux_window:active_tab():tab_id()
+  seen_tabs[mux_window:window_id()] = { ids = ids, active = active }
+  if #unseen == 0 then return end
+
+  local desired = {}
+  for _, id in ipairs(order) do
+    if not index_of(unseen, id) then table.insert(desired, id) end
+  end
+  for _, id in ipairs(unseen) do
+    local desired_keys = {}
+    for i, existing in ipairs(desired) do desired_keys[i] = keys[existing] end
+    local focused = index_of(desired, previous.active) or #desired
+    table.insert(desired, grouped_insert_position(desired_keys, focused, keys[id]) + 1, id)
+  end
+
+  -- MoveTab only acts on the active tab; queued actions run in order.
+  local current, moved = { table.unpack(order) }, false
+  for target, id in ipairs(desired) do
+    local from = index_of(current, id)
+    if from ~= target then
+      window:perform_action(act.ActivateTab(from - 1), pane)
+      window:perform_action(act.MoveTab(target - 1), pane)
+      table.insert(current, target, table.remove(current, from))
+      moved = true
+    end
+  end
+  if moved then window:perform_action(act.ActivateTab(index_of(desired, active) - 1), pane) end
+end
+
+wezterm.on('update-status', guarded('group-new-tabs', group_new_tabs))
+
+-- Spawning through the mux returns the tab synchronously, so it is grouped before
+-- the next repaint instead of jumping on the following status tick.
+local function spawn_grouped_tab(window, pane)
+  local cwd = pane:get_current_working_dir()
+  local tab = window:mux_window():spawn_tab {
+    domain = { DomainName = pane:get_domain_name() }, cwd = cwd and cwd.file_path,
+  }
+  tab:activate()
+  group_new_tabs(window, pane)
+end
+
 wezterm.on('trigger-vi-with-scrollback', function(window, pane)
   local text = pane:get_lines_as_text(pane:get_dimensions().scrollback_rows)
 
@@ -338,7 +416,7 @@ end
 -- Keybindings
 config.keys = {
   { key = 'P', mods = 'CMD|SHIFT', action = act.ActivateCommandPalette },
-  { key = 't', mods = 'CMD', action = act.SpawnTab 'CurrentPaneDomain' },
+  { key = 't', mods = 'CMD', action = wezterm.action_callback(spawn_grouped_tab) },
   { key = 't', mods = 'CMD|SHIFT', action = wezterm.action_callback(show_tab_picker) },
   { key = 'd', mods = 'CMD', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
   { key = 'd', mods = 'CMD|SHIFT', action = act.SplitVertical { domain = 'CurrentPaneDomain' } },
