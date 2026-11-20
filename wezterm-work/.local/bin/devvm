@@ -238,6 +238,15 @@ wait_for_file() {
   done
 }
 
+wait_for_result() {
+  local request=$1 gui
+  gui=$(<"$request.accepted")
+  while [[ ! -f "$request.result" ]]; do
+    kill -0 "$gui" 2>/dev/null || return 1
+    sleep 0.1
+  done
+}
+
 # The short-lived local pane gives shell commands a route into this GUI's Lua API.
 if [[ ${1:-} == --request ]]; then
   request=$2
@@ -254,11 +263,12 @@ PY
   )
   deadline=$((SECONDS + 30))
   # Startup output can arrive before the GUI associates the new control window.
-  while [[ ! -f "$request.result" ]]; do
+  while [[ ! -f "$request.accepted" ]]; do
     ((SECONDS < deadline)) || exit 1
     printf '\033]1337;SetUserVar=DEVVM_REQUEST=%s\007' "$request_encoded"
     sleep 0.1
   done
+  wait_for_result "$request" || exit 1
   touch "$request.consumed"
   exit 0
 fi
@@ -361,7 +371,8 @@ else
   "$wezterm" start --always-new-process --workspace devservers --cwd "$HOME" \
     -- /bin/bash "$script_path" --request "$request" >"$state_dir/startup.log" 2>&1 &
 fi
-wait_for_file "$request.result" || die 'WezTerm did not respond; ensure wezterm-work is installed and reload the config'
+wait_for_file "$request.accepted" || die 'WezTerm did not respond; ensure wezterm-work is installed and reload the config'
+wait_for_result "$request" || die 'WezTerm exited before finishing the request'
 wait_for_file "$request.consumed" || die 'request pane did not finish'
 python3 - "$request.result" <<'PY'
 import json, sys

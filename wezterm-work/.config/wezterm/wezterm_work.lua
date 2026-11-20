@@ -279,6 +279,13 @@ local function receive_request(_, pane, name, path)
   -- Retries must not replay a merge while its first remote operation is pending.
   if wezterm.GLOBAL.devvm_inflight == path then return end
   wezterm.GLOBAL.devvm_inflight = path
+  -- Relocating several hosts can outlast any fixed deadline, so devvm keeps the
+  -- request lock for as long as this GUI lives instead of timing out mid-relocation.
+  local accepted = io.open(path .. '.accepted.tmp', 'w')
+  if accepted then
+    accepted:write(tostring(wezterm.procinfo.pid())); accepted:close()
+    os.rename(path .. '.accepted.tmp', path .. '.accepted')
+  end
   local result
   local ok, err = pcall(function()
     local f = assert(io.open(path, 'r'))

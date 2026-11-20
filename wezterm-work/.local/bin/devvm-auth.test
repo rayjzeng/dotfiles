@@ -37,10 +37,11 @@ if [[ $1 == -n ]]; then printf '[]\\n'; exit 0; fi
 [[ $1 == cli ]] && exit 1
 request=${!#}
 python3 - "$request" <<'REPLY'
-import json, sys
+import json, os, sys
 from pathlib import Path
 p=Path(sys.argv[1])
 Path(str(p)+'.result').write_text(json.dumps({'messages': [], 'errors': []}))
+Path(str(p)+'.accepted').write_text(str(os.getpid()))
 Path(str(p)+'.consumed').touch()
 REPLY
 ''')

@@ -175,13 +175,14 @@ for arg in "$@"; do
 done
 request=${!#}
 python3 - "$request" <<'REPLY'
-import json, sys
+import json, os, sys
 from pathlib import Path
 p = Path(sys.argv[1])
 request = json.loads(p.read_text())
 assert request['hosts'] == ['devvm126.example.test'], request
 (p.parents[2] / 'healthy-request').write_text('received')
 Path(str(p) + '.result').write_text(json.dumps({'messages': [], 'errors': []}))
+Path(str(p) + '.accepted').write_text(str(os.getpid()))
 Path(str(p) + '.consumed').touch()
 REPLY
 ''')
@@ -217,3 +218,24 @@ test ! -e "$test_dir/overlap"
 
 (cd "$script_dir"; /bin/bash ./devvm) >"$test_dir/relative" 2>&1
 printf 'PASS: devvm host resolution, validation, socket preservation, and relative invocation\n'
+
+# A relocation that outlasts the delivery deadline must keep the request (and its
+# lock) until the GUI replies, but must not wait on a GUI that has exited.
+cat >"$test_dir/wezterm" <<'WT'
+#!/bin/bash
+[[ $1 == -n ]] && { printf '[]\n'; exit 0; }
+[[ $1 == cli ]] && exit 1
+request=${!#}
+sleep "$DEVVM_TEST_GUI_LIFETIME" &
+printf '%s' $! >"$request.accepted.tmp"
+mv "$request.accepted.tmp" "$request.accepted"
+if [[ -n ${DEVVM_TEST_REPLY_DELAY:-} ]]; then
+  (sleep "$DEVVM_TEST_REPLY_DELAY"
+   printf '{"messages": [], "errors": []}' >"$request.result"
+   touch "$request.consumed") 2>/dev/null &
+fi
+WT
+DEVVM_TEST_GUI_LIFETIME=40 DEVVM_TEST_REPLY_DELAY=31 "$devvm" >"$test_dir/output" 2>&1
+DEVVM_TEST_GUI_LIFETIME=0.5 expect_failure
+grep -q 'WezTerm exited before finishing the request' "$test_dir/output"
+printf 'PASS: devvm keeps a long relocation request until the GUI replies or exits\n'
