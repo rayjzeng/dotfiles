@@ -68,7 +68,8 @@ is a laptop merely because a WezTerm executable is visible.
 7. Apply WezTerm configuration only when the selected environment enables it.
    Before stowing, create `~/.config/wezterm` and use
    `stow --no-folding wezterm` so the downloaded `wezterm.sh` stays outside the
-   repository. Then install the shell integration:
+   repository. Add `wezterm-work` to the same command when the environment
+   reference selects it. Then install the shell integration:
 
    ```sh
    curl -o ~/.config/wezterm/wezterm.sh https://raw.githubusercontent.com/wez/wezterm/main/assets/shell-integration/wezterm.sh
