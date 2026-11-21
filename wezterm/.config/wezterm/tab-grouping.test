@@ -32,7 +32,9 @@ local ok, result = pcall(function()
   local function new_tab(name, domain)
     next_id = next_id + 1
     domain = domain or name:match('^%a+')
+    local id = next_id
     local pane = {
+      pane_id = function() return id end,
       get_domain_name = function() return domain end,
       get_current_working_dir = function() return nil end,
       get_user_vars = function() return {} end,
