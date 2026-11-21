@@ -1,0 +1,16 @@
+Time(utc: 2026-11-18T17:34:18.343041+00:00) split start content=1
+Time(utc: 2026-11-18T17:34:18.343293+00:00) split start content=2
+Time(utc: 2026-11-18T17:34:18.677010+00:00) split done menu=3
+Time(utc: 2026-11-18T17:34:18.779233+00:00) split done menu=4
+Time(utc: 2026-11-18T17:34:23.279565+00:00) UNRECOGNIZED_MENU id=2 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.279859+00:00) UNRECOGNIZED_MENU id=2 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.317440+00:00) UNRECOGNIZED_MENU id=4 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.317836+00:00) UNRECOGNIZED_MENU id=4 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.337878+00:00) UNRECOGNIZED_MENU id=4 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.338351+00:00) UNRECOGNIZED_MENU id=2 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.360716+00:00) UNRECOGNIZED_MENU id=4 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.360840+00:00) UNRECOGNIZED_MENU id=2 var=nil role=nil
+Time(utc: 2026-11-18T17:34:23.362282+00:00) split start content=1
+Time(utc: 2026-11-18T17:34:23.372759+00:00) split start content=3
+Time(utc: 2026-11-18T17:34:23.696173+00:00) split done menu=5
+Time(utc: 2026-11-18T17:34:24.011317+00:00) split done menu=6

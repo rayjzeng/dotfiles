@@ -1,0 +1,149 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(cd "$script_dir/../../.." && pwd)
+test_dir=$(mktemp -d /tmp/devvm-config-test.XXXXXX)
+trap 'rm -rf "$test_dir"' EXIT
+export DEVVM_CONFIG_DIR="$test_dir/config"
+export DEVVM_SOCKET_DIR="$test_dir/sockets"
+export DEVVM_STATE_DIR="$test_dir/state"
+mkdir -p "$DEVVM_CONFIG_DIR"
+cat >"$DEVVM_CONFIG_DIR/devservers" <<'HOSTS'
+devvm123.example.test alpha
+devvm124.example.test beta
+local.example.test office
+a.example.test first
+h.example.test second
+HOSTS
+
+python3 - "$repo_dir" "$test_dir" <<'PY'
+import sys
+from pathlib import Path
+repo, root = map(Path, sys.argv[1:])
+source = str(repo / 'wezterm/.config/wezterm/wezterm.lua')
+(root / 'personal.lua').write_text(f'''
+local config = dofile({source!r})
+assert(config.tab_bar_at_bottom and not config.use_fancy_tab_bar, 'native Powerline bar must be at the bottom')
+assert(not config.unix_domains or #config.unix_domains == 0, 'personal config registers remote domains')
+for _, rule in ipairs(config.hyperlink_rules) do
+  assert(not rule.format:find('internalfb') and not rule.format:find('fburl'), 'personal config has work hyperlinks')
+end
+return config
+''')
+(root / 'work.lua').write_text(f'''
+local wezterm = require 'wezterm'
+local original_on = wezterm.on
+local render
+wezterm.on = function(name, callback)
+  if name == 'format-tab-title' then render = callback end
+  return original_on(name, callback)
+end
+local config = dofile({source!r})
+wezterm.on = original_on
+assert(config.tab_bar_at_bottom and not config.use_fancy_tab_bar, 'work tabs must use the native bottom bar')
+assert(#config.unix_domains == 10, 'work domain pairs were not registered')
+assert(config.unix_domains[1].socket_path == os.getenv('DEVVM_SOCKET_DIR') .. '/devvm123.sock')
+assert(config.unix_domains[1].no_serve_automatically, 'work domain might spawn a local server')
+assert(not config.unix_domains[1].connect_automatically, 'ordinary startup would connect devservers')
+local work = dofile(os.getenv('DEVVM_CONFIG_DIR') .. '/wezterm_work.lua')
+local label = work.tab_domain({{active_pane={{domain_name='devserver:devvm123'}}}})
+assert(label == 'alpha', 'host alias missing from tab label')
+local function formatted(domain, active, width)
+  local parts = render({{tab_index=0, is_active=active, active_pane={{domain_name=domain, title='shell'}}}}, {{}}, {{}}, config, false, width)
+  assert(type(parts) == 'table', 'Powerline tabs must return formatted segments')
+  local text, colors = {{}}, {{}}
+  for _, part in ipairs(parts) do
+    if part.Text then table.insert(text, part.Text) end
+    if part.Background then table.insert(colors, part.Background.Color) end
+  end
+  text = table.concat(text)
+  assert(wezterm.column_width(text) <= width, 'tab renderer exceeds its available width')
+  return text, table.concat(colors, ',')
+end
+local alpha, alpha_color = formatted('devserver:devvm123', true, 40)
+local alternate, alternate_color = formatted('devserver:devvm123:alternate', true, 40)
+local beta, beta_color = formatted('devserver:devvm124', true, 40)
+local direct, direct_color = formatted('devvm123.example.test', true, 40)
+local local_text, local_color = formatted('local', true, 40)
+local _, office_color = formatted('devserver:local', true, 40)
+local _, a_color = formatted('devserver:a', true, 40)
+local _, h_color = formatted('devserver:h', true, 40)
+assert(local_text:find('Local', 1, true), 'a server named local must not relabel the local domain')
+assert(local_color ~= office_color, 'a server named local must have its own color')
+assert(a_color ~= h_color, 'configured servers must get distinct palette slots while available')
+assert(alpha:find('alpha', 1, true) and beta:find('beta', 1, true), 'tabs must identify their server')
+assert(alpha_color == alternate_color and alpha_color == direct_color, 'server colors must survive reattachment and direct domains')
+assert(alpha_color ~= beta_color and alpha_color ~= local_color, 'configured servers and Local need distinct colors')
+for _, width in ipairs({{1, 2, 5, 12}}) do formatted('devserver:devvm123', false, width) end
+local keys = {{}}
+for _, key in ipairs(config.keys) do keys[key.mods .. ':' .. key.key] = key.action end
+assert(keys['CMD:t'], 'same-domain new tab binding missing')
+assert(keys['CMD|SHIFT:o'], 'host picker missing')
+-- A handler that fails on every repaint must fall back to defaults and then stop
+-- running, rather than logging a traceback per frame.
+local broken = {{tab_index='not a number', is_active=true, active_pane={{domain_name='local', title='shell'}}}}
+local good = {{tab_index=0, is_active=true, active_pane={{domain_name='local', title='shell'}}}}
+assert(render(broken, {{}}, {{}}, config, false, 40) == nil, 'failing tab renderer must fall back to the default title')
+assert(type(render(good, {{}}, {{}}, config, false, 40)) == 'table', 'one failure must not disable the renderer')
+for _ = 1, 60 do render(broken, {{}}, {{}}, config, false, 40) end
+assert(render(good, {{}}, {{}}, config, false, 40) == nil, 'persistently failing renderer was not disabled')
+return config
+''')
+(root / 'invalid.lua').write_text(f'''
+local config = dofile({source!r})
+assert(not config.unix_domains or #config.unix_domains == 0, 'invalid host list should disable host registration')
+assert(config.window_decorations == 'RESIZE', 'bad host list broke shared configuration')
+return config
+''')
+# Machine-local font overrides must reach the tab bar, not just terminal text.
+(root / 'local').mkdir()
+(root / 'local/wezterm_local.lua').write_text("return { font_size = 15.0 }\n")
+(root / 'local/local.lua').write_text(f'''
+package.path = {str(root / 'local/?.lua')!r} .. ';' .. package.path
+local config = dofile({source!r})
+assert(config.font_size == 15.0, 'local override was not loaded')
+assert(config.window_frame.font_size == 15.0, 'tab bar ignored the local font size')
+assert(config.window_frame.font == config.font, 'tab bar does not use the terminal font')
+return config
+''')
+for name in ('personal', 'work', 'invalid', 'local/local'):
+    path = root / (name + '.lua')
+    body = path.read_text()
+    path.write_text('local ok, result = pcall(function()\n' + body + '\nend)\n'
+        + f'local f = assert(io.open({str(root / (name + ".result"))!r}, "w"))\n'
+        + 'f:write(ok and "PASS" or tostring(result)); f:close()\n'
+        + 'return ok and result or {}\n')
+PY
+for name in personal local/local; do
+  wezterm --config-file "$test_dir/$name.lua" show-keys >/dev/null
+  if [[ $(cat "$test_dir/$name.result") != PASS ]]; then
+    cat "$test_dir/$name.result" >&2
+    exit 1
+  fi
+done
+ln -s "$script_dir/wezterm_work.lua" "$DEVVM_CONFIG_DIR/wezterm_work.lua"
+# A stale prototype flag must never load the removed terminal-footer code.
+touch "$DEVVM_CONFIG_DIR/domain-menu"
+printf 'error("obsolete terminal menu was loaded")\n' >"$DEVVM_CONFIG_DIR/wezterm_domains.lua"
+wezterm --config-file "$test_dir/work.lua" show-keys >/dev/null
+if [[ $(cat "$test_dir/work.result") != PASS ]]; then
+  cat "$test_dir/work.result" >&2
+  exit 1
+fi
+mkdir -p "$test_dir/target"
+stow --dir "$repo_dir" --target "$test_dir/target" --no-folding wezterm-work
+test -L "$test_dir/target/.config/wezterm/wezterm_work.lua"
+test -L "$test_dir/target/.local/bin/devvm"
+test ! -e "$test_dir/target/.local/bin/devvm.test"
+test ! -e "$test_dir/target/.config/wezterm/config.test"
+test ! -e "$test_dir/target/.config/wezterm/integration.test"
+for entries in '.. broken' $'same.one.test a\nsame.two.test b' $'alpha.example.test beta\nbeta.example.test gamma' 'bad/host alias extra' 'devvm123.example.test all'; do
+  printf '%s\n' "$entries" >"$DEVVM_CONFIG_DIR/devservers"
+  wezterm --config-file "$test_dir/invalid.lua" show-keys >/dev/null
+  if [[ $(cat "$test_dir/invalid.result") != PASS ]]; then
+    cat "$test_dir/invalid.result" >&2
+    exit 1
+  fi
+done
+printf 'PASS: native bottom Powerline tabs, domain colors, width bounds, and personal/work isolation\n'

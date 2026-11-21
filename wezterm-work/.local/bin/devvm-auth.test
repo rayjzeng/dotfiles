@@ -1,0 +1,75 @@
+#!/bin/bash
+set -euo pipefail
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "$script_dir/devvm" <<'PY'
+import json, os, pty, select, socket, subprocess, sys, tempfile, time
+from pathlib import Path
+with tempfile.TemporaryDirectory(prefix='devvm-auth-', dir='/tmp') as directory:
+    root = Path(directory)
+    cfg = root / 'config'; cfg.mkdir()
+    (cfg / 'devservers').write_text('fixture.example.test auth\n')
+    sock = root / 'mux.sock'
+    bound = socket.socket(socket.AF_UNIX); bound.bind(str(sock))
+    status = {'status': {'daemon_status': {'connections': {'peer': {
+        'hostname': 'fixture.example.test', 'outbound_udses': {'f': {
+            'dst_socket_path': '/run/user/1000/wezterm/sock', 'src_socket_path': str(sock)}}}}}}}
+    (root / 'status').write_text(json.dumps(status))
+    ek = root / 'ek'
+    ek.write_text('''#!/bin/bash
+set -eu
+case $1 in
+  status)
+    if [[ -f "$AUTH_ROOT/connected" ]]; then cat "$AUTH_ROOT/status";
+    else printf '%s\\n' '{"status":{"daemon_status":{"connections":{}}}}'; fi ;;
+  connect)
+    [[ -t 0 ]] || { printf 'STDIN_IS_NOT_A_TTY\\n'; exit 1; }
+    printf 'APPROVE_FIXTURE\\n'
+    IFS= read -r answer
+    [[ $answer == fixture-approve ]]
+    touch "$AUTH_ROOT/connected" ;;
+  run) exit 0 ;;
+  *) exit 1 ;;
+esac
+''')
+    gui = root / 'wezterm'
+    gui.write_text('''#!/bin/bash
+if [[ $1 == -n ]]; then printf '[]\\n'; exit 0; fi
+[[ $1 == cli ]] && exit 1
+request=${!#}
+python3 - "$request" <<'REPLY'
+import json, os, sys
+from pathlib import Path
+p=Path(sys.argv[1])
+Path(str(p)+'.result').write_text(json.dumps({'messages': [], 'errors': []}))
+Path(str(p)+'.accepted').write_text(str(os.getpid()))
+Path(str(p)+'.consumed').touch()
+REPLY
+''')
+    ek.chmod(0o755); gui.chmod(0o755)
+    env = dict(os.environ, AUTH_ROOT=str(root), DEVVM_EK=str(ek), DEVVM_WEZTERM=str(gui),
+               DEVVM_CONFIG_DIR=str(cfg), DEVVM_SOCKET_DIR=str(root / 'sockets'), DEVVM_STATE_DIR=str(root / 'state'))
+    def run(*args):
+        master, slave = pty.openpty()
+        child = subprocess.Popen(['/bin/bash',sys.argv[1],*args],env=env,stdin=slave,stdout=slave,stderr=slave)
+        os.close(slave)
+        output = b''; approved = False; deadline = time.monotonic()+10
+        try:
+            while time.monotonic() < deadline:
+                if select.select([master],[],[],.1)[0]:
+                    try: output += os.read(master,65536)
+                    except OSError: break
+                if b'APPROVE_FIXTURE' in output and not approved:
+                    other = subprocess.run(['/bin/bash',sys.argv[1],'local'],env=env,capture_output=True,timeout=3)
+                    assert other.returncode == 0, 'pending authentication blocked another domain request'
+                    os.write(master,b'fixture-approve\n'); approved = True
+                if child.poll() is not None: break
+            result=child.wait(timeout=5)
+            assert result == 0, output.decode(errors='replace')
+            return output
+        finally: os.close(master)
+    try:
+        run('auth')
+    finally:
+        subprocess.run(['pkill', '-f', 'devvm-guard relay .* ' + str(root) + '/'])
+    print('PASS: interactive authentication receives terminal stdin without blocking local requests')
+PY

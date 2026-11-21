@@ -1,0 +1,38 @@
+damaged-delay-menu {"second": 0, "list_seconds": 0.041, "gui_alive": true, "panes": 2, "menus": []}
+damaged-delay-menu {"second": 1, "list_seconds": 0.011, "gui_alive": true, "panes": 2, "menus": []}
+damaged-delay-menu {"second": 2, "list_seconds": 0.014, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-delay-menu {"second": 3, "list_seconds": 0.013, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-delay-menu {"second": 4, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-delay-menu FORCED_MENU_HEIGHT 2 0
+damaged-delay-menu {"second": 5, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-delay-menu {"second": 6, "list_seconds": 0.014, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 7, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 8, "list_seconds": 0.01, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 9, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 10, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 11, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 12, "list_seconds": 0.015, "gui_alive": true, "panes": 4, "menus": [[0, 2, 16], [1, 3, 1]]}
+damaged-delay-menu {"second": 13, "list_seconds": 0.012, "gui_alive": true, "panes": 3, "menus": [[1, 3, 1]]}
+damaged-delay-menu {"second": 14, "list_seconds": 0.011, "gui_alive": true, "panes": 3, "menus": [[1, 3, 1]]}
+damaged-delay-menu {"second": 15, "list_seconds": 0.011, "gui_alive": true, "panes": 3, "menus": [[1, 3, 1]]}
+damaged-delay-menu {"second": 16, "list_seconds": 0.014, "gui_alive": true, "panes": 3, "menus": [[1, 3, 1]]}
+damaged-delay-menu {"second": 17, "list_seconds": 0.011, "gui_alive": true, "panes": 3, "menus": [[1, 3, 1]]}
+damaged-zero-menu {"second": 0, "list_seconds": 0.021, "gui_alive": true, "panes": 2, "menus": []}
+damaged-zero-menu {"second": 1, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 2, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 3, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 4, "list_seconds": 0.01, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-zero-menu FORCED_MENU_HEIGHT 2 0
+damaged-zero-menu {"second": 5, "list_seconds": 0.013, "gui_alive": true, "panes": 4, "menus": [[0, 2, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 6, "list_seconds": 0.025, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 7, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 8, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 9, "list_seconds": 0.02, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 10, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 11, "list_seconds": 0.013, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 12, "list_seconds": 0.012, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 13, "list_seconds": 0.013, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 14, "list_seconds": 0.015, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 15, "list_seconds": 0.014, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 16, "list_seconds": 0.01, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}
+damaged-zero-menu {"second": 17, "list_seconds": 0.011, "gui_alive": true, "panes": 4, "menus": [[0, 4, 1], [1, 3, 1]]}

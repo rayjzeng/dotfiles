@@ -1,0 +1,50 @@
+#!/bin/bash
+set -euo pipefail
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "${1:-$script_dir/devvm}" <<'PY'
+import json, os, pty, select, subprocess, sys, tempfile, time
+from pathlib import Path
+
+def deliver(directory, gui, reply):
+    """Run a request pane; accept on its second notification as `gui`, then optionally reply."""
+    request = Path(directory) / f'request-{gui}.json'
+    request.write_text(json.dumps({'action': 'local', 'hosts': []}))
+    master, slave = pty.openpty()
+    child = subprocess.Popen(['/bin/bash', sys.argv[1], '--request', str(request)],
+                             stdin=slave, stdout=slave, stderr=slave,
+                             env=dict(os.environ, WEZTERM_UNIX_SOCKET='/tmp/request-fixture.sock'))
+    os.close(slave)
+    output = b''
+    accepted = False
+    deadline = time.monotonic() + 4
+    try:
+        while time.monotonic() < deadline and child.poll() is None:
+            if select.select([master], [], [], .1)[0]:
+                try:
+                    output += os.read(master, 65536)
+                except OSError:
+                    break
+            # The first startup notification is deliberately dropped.
+            if output.count(b'\x1b]1337;SetUserVar=DEVVM_REQUEST=') >= 2 and not accepted:
+                Path(str(request) + '.accepted').write_text(str(gui))
+                accepted = True
+                if reply:
+                    Path(str(request) + '.result').write_text(json.dumps({'messages': [], 'errors': []}))
+        assert accepted, 'request was not retried after a lost startup notification'
+        return child.wait(timeout=2), Path(str(request) + '.consumed').exists()
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            child.wait(timeout=2)
+        os.close(master)
+
+
+with tempfile.TemporaryDirectory(prefix='devvm-request-', dir='/tmp') as directory:
+    assert deliver(directory, os.getpid(), reply=True) == (0, True)
+    print('PASS: request delivery retries a lost startup notification and acknowledges the reply')
+    exited = subprocess.Popen(['true'])
+    exited.wait()
+    status, consumed = deliver(directory, exited.pid, reply=False)
+    assert status != 0 and not consumed, 'request pane kept waiting on an exited GUI'
+    print('PASS: request pane stops waiting once the accepting GUI exits')
+PY

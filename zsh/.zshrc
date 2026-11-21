@@ -153,6 +153,9 @@ zstyle ':completion::complete:*' cache-path "$ZDOTDIR/.zcompcache"
 _module="$ZMODULES/zsh-completions"
 [[ -d $_module ]] && fpath=($_module $fpath)
 
+_module="$HOME/.local/share/zsh/site-functions"
+[[ -d $_module ]] && fpath=($_module $fpath)
+
 # Load more completions
 _module="$ZMODULES/third-party"
 if [[ -d $_module ]]; then
@@ -186,7 +189,7 @@ setopt EXTENDED_GLOB       # Needed for file modification glob modifiers with co
 # $# evaluates to the length of the parameter
 autoload -Uz compinit bashcompinit
 _comp_files=(${ZDORDIR:-$HOME}/.zcompdump(N.mh-23))
-if (( $#_comp_files )); then
+if (( $#_comp_files )) && [[ ! "$HOME/.local/share/zsh/site-functions" -nt "$ZDOTDIR/.zcompdump" ]]; then
   compinit -C;
 else
   compinit -d "$ZDOTDIR/.zcompdump";

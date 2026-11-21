@@ -1,0 +1,15 @@
+restart-focus-menu {"second": 0, "list_seconds": 0.047, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 2, "menus": []}
+restart-focus-menu {"second": 1, "list_seconds": 0.013, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 2, "menus": []}
+restart-focus-menu {"second": 2, "list_seconds": 0.026, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-focus-menu {"second": 3, "list_seconds": 0.011, "gui_alive": true, "active_panes": [[1, "bash"], [3, "dotfiles-domain-menu"]], "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-focus-menu {"second": 4, "list_seconds": 0.012, "gui_alive": true, "active_panes": [[1, "bash"], [3, "dotfiles-domain-menu"]], "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-focus-menu SECOND_GUI 92966
+restart-focus-menu {"second": 5, "list_seconds": 0.011, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-focus-menu {"second": 6, "list_seconds": 0.012, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 4, "menus": [[1, 2, 1], [0, 3, 1]]}
+restart-focus-menu {"second": 7, "list_seconds": 0.018, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-focus-menu {"second": 8, "list_seconds": 0.011, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-focus-menu {"second": 9, "list_seconds": 0.014, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-focus-menu {"second": 10, "list_seconds": 0.011, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-focus-menu {"second": 11, "list_seconds": 0.01, "gui_alive": true, "active_panes": [[1, "bash"], [5, "dotfiles-domain-menu"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-focus-menu {"second": 12, "list_seconds": 0.01, "gui_alive": true, "active_panes": [[1, "bash"], [5, "dotfiles-domain-menu"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}
+restart-focus-menu {"second": 13, "list_seconds": 0.014, "gui_alive": true, "active_panes": [[1, "bash"], [0, "bash"]], "panes": 6, "menus": [[1, 2, 1], [1, 4, 1], [0, 3, 1], [0, 5, 1]]}

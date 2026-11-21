@@ -1,7 +1,14 @@
 local wezterm = require 'wezterm'
 local act = wezterm.action
 local config = wezterm.config_builder()
-local home = os.getenv('HOME')
+local work
+local work_config_dir = os.getenv('DEVVM_CONFIG_DIR') or wezterm.home_dir .. '/.config/wezterm'
+wezterm.add_to_config_reload_watch_list(work_config_dir .. '/wezterm_work.lua')
+local work_file = io.open(work_config_dir .. '/wezterm_work.lua', 'r')
+if work_file then
+  work_file:close()
+  work = dofile(work_config_dir .. '/wezterm_work.lua')
+end
 
 config.color_scheme = 'Dracula (Official)'
 
@@ -11,10 +18,17 @@ config.font_size = 12.0
 config.scrollback_lines = 20000
 
 -- Window settings
+config.window_decorations = 'RESIZE'
 config.window_background_opacity = 0.96
 config.enable_tab_bar = true
 config.hide_tab_bar_if_only_one_tab = false
 config.use_fancy_tab_bar = false
+config.tab_bar_at_bottom = true
+config.tab_max_width = 40
+config.window_frame = {
+  active_titlebar_bg = '#282a36',
+  inactive_titlebar_bg = '#282a36',
+}
 config.enable_scroll_bar = true
 
 config.hyperlink_rules = {
@@ -22,32 +36,47 @@ config.hyperlink_rules = {
     regex = '\\b\\w+://(?:[\\w.-]+)\\.[a-z]{2,15}\\S*\\b',
     format = '$0',
   },
-  {
-    regex = '\\b([tTdDpP]\\d+)\\b',
-    format = 'https://fburl.com/b/$1',
-  },
-  {
-    regex = '^>>> Lint for (.*):$',
-    format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$1&editor=vscode-insiders',
-  },
-  {
-    regex = home .. '/fbsource/(.*):(\\d+):\\d+',
-    format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$1&lines[0]=$2&editor=vscode-insiders',
-  },
-  {
-    regex = '--> (fbcode/.*):(\\d+):\\d+',
-    format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$1&lines[0]=$2&editor=vscode-insiders',
-  },
-  {
-    regex = '^(---|\\+\\+\\+) [ab]/(fbcode/.*)',
-    format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$2&editor=vscode-insiders',
-  },
 }
 
-config.mouse_bindings = {
-  { event = { Up = { streak = 1, button = 'Left' } }, mods = 'CMD',
-    action = act.OpenLinkAtMouseCursor },
-}
+-- TUIs can open links on press; keep both halves of Command-click in the GUI.
+config.mouse_bindings = {}
+for _, mouse_reporting in ipairs { false, true } do
+  for _, alt_screen in ipairs { false, true } do
+    table.insert(config.mouse_bindings, {
+      event = { Down = { streak = 1, button = 'Left' } }, mods = 'CMD',
+      mouse_reporting = mouse_reporting, alt_screen = alt_screen, action = act.Nop,
+    })
+    table.insert(config.mouse_bindings, {
+      event = { Up = { streak = 1, button = 'Left' } }, mods = 'CMD',
+      mouse_reporting = mouse_reporting, alt_screen = alt_screen, action = act.OpenLinkAtMouseCursor,
+    })
+  end
+end
+
+-- Handlers that run on every repaint or status tick turn one persistent error into
+-- a traceback per frame, flooding the log and slowing the GUI. Log the first
+-- failure, then disable the handler (falling back to defaults) if it keeps failing;
+-- a config reload re-enables it.
+local GUARD_MAX_FAILURES, GUARD_WINDOW_SECONDS = 50, 10
+local function guarded(name, handler)
+  local failures, window_start, disabled = 0, 0, false
+  return function(...)
+    if disabled then return nil end
+    local ok, result = pcall(handler, ...)
+    if ok then return result end
+    local now = os.time()
+    if now - window_start > GUARD_WINDOW_SECONDS then failures, window_start = 0, now end
+    failures = failures + 1
+    if failures == 1 then
+      wezterm.log_error(name .. ' failed: ' .. tostring(result))
+    elseif failures >= GUARD_MAX_FAILURES then
+      disabled = true
+      wezterm.log_error(name .. ' disabled after ' .. failures .. ' failures in '
+        .. GUARD_WINDOW_SECONDS .. 's; reload the config to re-enable')
+    end
+    return nil
+  end
+end
 
 -- Switch color scheme for remote sessions (Enkaku mux, SSH, etc.)
 local REMOTE_COLOR_SCHEME = 'Catppuccin Mocha'
@@ -69,8 +98,13 @@ local function pane_is_remote(pane)
 end
 
 local function apply_remote_scheme(window, pane)
-  local want = pane_is_remote(pane) and REMOTE_COLOR_SCHEME or nil
-  local overrides = window:get_config_overrides() or {}
+  local live, want = pcall(function()
+    if work and work.is_managed_domain(pane:get_domain_name()) then return nil end
+    return pane_is_remote(pane) and REMOTE_COLOR_SCHEME or nil
+  end)
+  if not live then return end
+  local ok, overrides = pcall(function() return window:get_config_overrides() or {} end)
+  if not ok then return end
   if overrides.color_scheme == want then
     return
   end
@@ -83,12 +117,14 @@ end
 -- exits. The shell re-emits the IS_REMOTE user var on every prompt (precmd), and
 -- user-var-changed fires immediately on that — reverting the moment you land back
 -- at a local prompt. update-status still covers mid-session, activity-driven cases.
-wezterm.on('update-status', function(window, pane)
+wezterm.on('update-status', guarded('update-status', function(window, pane)
   apply_remote_scheme(window, pane)
-end)
+end))
 
 wezterm.on('user-var-changed', function(window, pane, name, value)
-  if name == 'IS_REMOTE' then
+  -- A background pane's prompt must not repaint the window against update-status,
+  -- which follows the active pane; the two would flip the scheme on every prompt.
+  if name == 'IS_REMOTE' and pane:pane_id() == window:active_pane():pane_id() then
     apply_remote_scheme(window, pane)
   end
 end)
@@ -150,10 +186,43 @@ local function resolve_tab_title(tab)
   return 'shell'
 end
 
-wezterm.on('format-tab-title', function(tab, tabs, panes, config, hover, max_width)
-  local title = wezterm.truncate_right(resolve_tab_title(tab), math.max(max_width - 1, 1))
-  return string.format(' %-11s', title)
-end)
+local tab_background = '#282a36'
+local domain_colors = { '#8be9fd', '#bd93f9', '#50fa7b', '#ffb86c', '#ff79c6', '#82aaff', '#f1fa8c' }
+
+local function domain_color(key, index)
+  if key == 'local' then return '#6272a4' end
+  if index then return domain_colors[(index - 1) % #domain_colors + 1] end
+  local hash = 0
+  for i = 1, #key do hash = (hash * 33 + key:byte(i)) % 2147483647 end
+  return domain_colors[hash % #domain_colors + 1]
+end
+
+wezterm.on('format-tab-title', guarded('format-tab-title', function(tab, tabs, panes, _, hover, max_width)
+  local domain = tab.active_pane and tab.active_pane.domain_name or 'local'
+  local label, key, index = domain == 'local' and 'Local' or domain, domain
+  if work then label, key, index = work.tab_domain(tab) end
+  local color = domain_color(key, index)
+  local background = (tab.is_active or hover) and color or tab_background
+  local foreground = (tab.is_active or hover) and tab_background or color
+  local title = tostring((tab.tab_index or 0) + 1) .. ' ' .. label .. ' · ' .. resolve_tab_title(tab)
+  if max_width < 4 then
+    return { { Foreground = { Color = foreground } }, { Background = { Color = background } },
+      { Text = wezterm.truncate_right(title, math.max(max_width, 0)) } }
+  end
+  title = wezterm.truncate_right(title, max_width - 4)
+  return {
+    { Background = { Color = background } }, { Foreground = { Color = tab_background } }, { Text = utf8.char(0xe0b0) },
+    { Foreground = { Color = foreground } }, { Attribute = { Intensity = tab.is_active and 'Bold' or 'Normal' } },
+    { Text = ' ' .. title .. ' ' },
+    { Background = { Color = tab_background } }, { Foreground = { Color = color } }, { Text = utf8.char(0xe0b0) },
+  }
+end))
+
+config.colors = { tab_bar = {
+  background = tab_background,
+  new_tab = { bg_color = tab_background, fg_color = '#f8f8f2' },
+  new_tab_hover = { bg_color = '#6272a4', fg_color = '#f8f8f2' },
+} }
 
 wezterm.on('trigger-vi-with-scrollback', function(window, pane)
   local text = pane:get_lines_as_text(pane:get_dimensions().scrollback_rows)
@@ -173,6 +242,8 @@ end)
 -- Keybindings
 config.keys = {
   { key = 'P', mods = 'CMD|SHIFT', action = act.ActivateCommandPalette },
+  { key = 't', mods = 'CMD', action = act.SpawnTab 'CurrentPaneDomain' },
+  { key = 't', mods = 'CMD|SHIFT', action = act.ShowTabNavigator },
   { key = 'd', mods = 'CMD', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
   { key = 'd', mods = 'CMD|SHIFT', action = act.SplitVertical { domain = 'CurrentPaneDomain' } },
   { key = 'LeftArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Left' },
@@ -187,6 +258,8 @@ config.keys = {
   { key = 'e', mods = 'CMD', action = act.EmitEvent 'trigger-vi-with-scrollback' },
   { key = 'k', mods = 'CMD', action = act.ClearScrollback 'ScrollbackAndViewport' },
   { key = 'f', mods = 'CMD', action = act.Search { Regex = '' } },
+  -- Leave mux sessions running on the server; Cmd+W would kill the remote tab
+  { key = 'w', mods = 'CMD|SHIFT', action = act.DetachDomain 'CurrentPaneDomain' },
 }
 
 local search_mode = wezterm.gui.default_key_tables().search_mode
@@ -198,6 +271,7 @@ table.insert(search_mode, { key = 'e', mods = 'CTRL', action = act.CopyMode 'Mov
 table.insert(search_mode, { key = 'u', mods = 'CTRL', action = act.CopyMode 'ClearPattern' })
 config.key_tables = { search_mode = search_mode }
 
+if work then work.apply_to_config(config) end
 
 -- Merge local overrides into config (local values win)
 local function merge(base, overrides)
@@ -215,5 +289,10 @@ local ok, local_overrides = pcall(require, 'wezterm_local')
 if ok and type(local_overrides) == 'table' then
   merge(config, local_overrides)
 end
+
+-- Derived after local overrides so a local font change reaches the tab bar too,
+-- unless the frame sets its own font.
+config.window_frame.font = config.window_frame.font or config.font
+config.window_frame.font_size = config.window_frame.font_size or config.font_size
 
 return config

@@ -1,0 +1,423 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "$script_dir" <<'PY'
+import importlib.machinery, json, os, re, signal, subprocess, sys, tempfile, time, types
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+source = Path(sys.argv[1])
+repo = source.parents[2]
+app = Path('/Applications/WezTerm.app/Contents/MacOS')
+wezterm = str(app / 'wezterm')
+processes = []
+
+def wait_for(check, description, timeout=15):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = check()
+        if value:
+            return value
+        time.sleep(0.1)
+    raise AssertionError('timed out: ' + description)
+
+with tempfile.TemporaryDirectory(prefix='devvm-integration-', dir='/tmp') as temp:
+    root = Path(temp)
+    try:
+        exit_token = 'DEVVM_FIXTURE_EXIT_' + str(os.getpid())
+        reader = "trap '' INT; stty -echo; while IFS= read -r line; do case \"$line\" in *'" + exit_token + "'*) exit 0;; esac; done"
+        config_dir = root / 'config'
+        config_dir.mkdir()
+        # Copy the actual module into an isolated config without stowing it at HOME.
+        (config_dir / 'wezterm_work.lua').write_bytes((source / 'wezterm_work.lua').read_bytes())
+        (config_dir / 'devservers').write_text('host-a.example.test alpha\nhost-b.example.test beta\n')
+        # Stale flags are migration input, not an opt-in to terminal panes.
+        (config_dir / 'domain-menu').touch()
+        (config_dir / 'domain-menu-used').touch()
+        sockets = root / 'sockets'
+        sockets.mkdir()
+        env = dict(os.environ, DEVVM_CONFIG_DIR=str(config_dir), DEVVM_SOCKET_DIR=str(sockets),
+                   DEVVM_STATE_DIR=str(root / 'state'), DEVVM_HELPER=str(root / 'bin/devvm'),
+                   WEZTERM_LOG='info,config=debug')
+        # The GUI's helper passes through to devvm, except that flags make --group close
+        # the newest window (a fresh detach destination) or stall while preparing the server.
+        (root / 'bin').mkdir()
+        (root / 'bin/devvm-guard').symlink_to(repo / 'wezterm-work/.local/bin/devvm-guard')
+        close_flag = root / 'close-destination'
+        slow_flag = root / 'slow-group'
+        (root / 'bin/devvm').write_text(f'''#!/bin/bash
+if [[ ${{1:-}} == --group && -e {slow_flag} ]]; then
+  rm {slow_flag}
+  touch {root}/group-started
+  sleep 4
+  touch {root}/group-finished
+fi
+if [[ ${{1:-}} == --group && -e {close_flag} ]]; then
+  rm {close_flag}
+  export WEZTERM_UNIX_SOCKET=$HOME/.local/share/wezterm/gui-sock-$PPID
+  for pane in $({wezterm} cli list --format json | python3 -c 'import json,sys; rows=json.load(sys.stdin); newest=max(r["window_id"] for r in rows); print(*(r["pane_id"] for r in rows if r["window_id"]==newest))'); do
+    {wezterm} cli kill-pane --pane-id "$pane"
+  done
+  sleep 0.5
+fi
+exec /bin/bash {repo / 'wezterm-work/.local/bin/devvm'} "$@"
+''')
+        forwards = {}
+        native_panes = {}
+        for short, title in [('host-a', 'DEVVM_ALPHA'), ('host-b', 'DEVVM_BETA')]:
+            socket = root / short / 'wezterm/sock'
+            socket.parent.mkdir(parents=True)
+            config = socket.parents[1] / 'config.lua'
+            config.write_text("return {unix_domains={{name='unix',socket_path=" + repr(str(socket))
+                              + "}},default_prog={'/bin/sh','-c'," + repr(reader)
+                              + "},default_cwd=" + repr(str(root)) + ",exit_behavior='Close'}\n")
+            log = (root / (short + '.log')).open('w')
+            processes.append(subprocess.Popen([str(app / 'wezterm-mux-server'), '--config-file', str(config)],
+                                               stdout=log, stderr=log, env=dict(env, XDG_RUNTIME_DIR=str(root))))
+            wait_for(socket.exists, 'remote test mux socket')
+            remote_env = dict(env, WEZTERM_UNIX_SOCKET=str(socket))
+            command = f"printf '\\033]0;{title}\\007\\nSESSION=%s\\n' \"$$\"; " + reader
+            created = subprocess.run([wezterm, '-n', 'cli', 'spawn', '--new-window', '--', '/bin/sh', '-c', command],
+                                     env=remote_env, check=True, capture_output=True, text=True)
+            native_panes[short] = int(created.stdout.strip())
+            menu_reader = "printf '\033]0;dotfiles-domain-menu\007'; stty -echo; while IFS= read -r line; do [ \"$line\" = DEVVM_MENU_EXIT ] && exit 0; done"
+            for height in (1, 8):
+                subprocess.run([wezterm, '-n', 'cli', 'split-pane', '--pane-id', str(native_panes[short]),
+                                '--bottom', '--top-level', '--cells', str(height), '--', '/bin/bash', '-c', menu_reader],
+                               env=remote_env, check=True, capture_output=True, text=True)
+            forwards[short] = {'hostname': short + '.example.test', 'outbound_udses': {
+                'test': {'dst_socket_path': '/run/user/1000/wezterm/sock', 'src_socket_path': str(socket)}}}
+
+        (root / 'status.json').write_text(json.dumps({'status': {'daemon_status': {'connections': forwards}}}))
+        ek = root / 'ek'
+        ek.write_text('''#!/usr/bin/env python3
+import json, os, subprocess, sys
+from pathlib import Path
+data = json.load(open(''' + repr(str(root / 'status.json')) + '''))
+if sys.argv[1] == 'status':
+    if os.environ.get('DEVVM_GUI_AUTH_TEST') == '1' and not Path(''' + repr(str(root / 'beta-connected')) + ''').exists():
+        data['status']['daemon_status']['connections'].pop('host-b', None)
+    print(json.dumps(data))
+elif sys.argv[1] == 'connect':
+    assert sys.stdin.isatty(), 'authentication stdin is not a terminal'
+    print('\\033]0;AUTH_BETA\\007AUTHENTICATION_READY', flush=True)
+    for line in sys.stdin:
+        if 'fixture-approve' in line:
+            Path(''' + repr(str(root / 'beta-connected')) + ''').touch()
+            sys.exit(0)
+    sys.exit(1)
+elif sys.argv[1] == 'run':
+    raise AssertionError('existing forwarded muxes must not require a remote shell')
+else:
+    sys.exit(1)
+''')
+        ek.chmod(0o755)
+        env['DEVVM_EK'] = str(ek)
+        gui_config = config_dir / 'gui.lua'
+        local_reader = "printf '\033]0;LOCAL_FIXTURE\007'; " + reader
+        gui_config.write_text('local w=require(\'wezterm\'); local c=dofile(' + repr(str(repo / 'wezterm/.config/wezterm/wezterm.lua'))
+                              + "); c.default_prog={'/bin/sh','-c'," + repr(local_reader)
+                              + "}; c.default_cwd=" + repr(str(root)) + "; c.exit_behavior='Close'; "
+                              + "w.on('update-status',function(g,p) local path=" + repr(str(root / 'active-'))
+                              + " .. g:mux_window():window_id() .. '.json'; local f=assert(io.open(path .. '.tmp','w')); "
+                              + "f:write(w.json_encode{title=p:get_title(),domain=p:get_domain_name(),pane_id=p:pane_id()}); "
+                              + "f:close();os.rename(path .. '.tmp',path);end); return c\n")
+        log = (root / 'gui.log').open('w')
+        gui = subprocess.Popen([str(app / 'wezterm-gui'), '--config-file', str(gui_config), 'start',
+                                '--always-new-process', '--class', 'devvm-integration-' + str(os.getpid()),
+                                '--workspace', 'personal'], stdout=log, stderr=log, env=env)
+        processes.append(gui)
+        gui_socket = Path.home() / '.local/share/wezterm' / ('gui-sock-' + str(gui.pid))
+        wait_for(gui_socket.exists, 'isolated GUI socket')
+        env['WEZTERM_UNIX_SOCKET'] = str(gui_socket)
+
+        def cli(*args):
+            p = subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=env,
+                               capture_output=True, text=True, timeout=15)
+            assert p.returncode == 0, p.stderr
+            return p.stdout
+
+        def listing():
+            return json.loads(cli('list', '--format', 'json'))
+
+        def run(*args):
+            p = subprocess.run([str(repo / 'wezterm-work/.local/bin/devvm'), *args], env=env,
+                               capture_output=True, text=True, timeout=45)
+            assert p.returncode == 0, p.stdout + p.stderr + '\nGUI: ' + (root / 'gui.log').read_text()[-5000:]
+            print(p.stdout.strip())
+
+        personal = wait_for(lambda: listing(), 'initial local pane')[0]['pane_id']
+        # Simulate an old live GUI being upgraded in place, with no migration marker.
+        for height in (1, 8):
+            cli('split-pane', '--pane-id', str(personal), '--bottom', '--top-level', '--cells', str(height),
+                '--', '/bin/bash', '-c', menu_reader)
+        wait_for(lambda: sum(p['title'] == 'dotfiles-domain-menu' for p in listing()) == 2, 'old local footers before reload')
+        gui_config.write_text(gui_config.read_text().replace('return c', "require('wezterm').GLOBAL.native_tabs_migrated=nil; return c"))
+        wait_for(lambda: not any(p['title'] == 'dotfiles-domain-menu' for p in listing()), 'in-place reload removes local footers')
+        native_socket = forwards['host-a']['outbound_udses']['test']['src_socket_path']
+        def native_alpha():
+            return json.loads(subprocess.check_output([wezterm, '-n', 'cli', 'list', '--format', 'json'], text=True,
+                                                      env=dict(env, WEZTERM_UNIX_SOCKET=native_socket)))
+        def widest(rows):
+            tabs = {}
+            for row in rows:
+                tabs[row['tab_id']] = max(tabs.get(row['tab_id'], 0), row['left_col'] + row['size']['cols'])
+            return max(tabs.values())
+        # A stale pane resize can widen a whole server tab; attaching one wider than
+        # the GPU viewport crashed the renderer, so attaching must fit it first. Inflate
+        # while no GUI is attached: an attached GUI shrinks the tab back by itself.
+        loader = importlib.machinery.SourceFileLoader('devvm_guard', str(repo / 'wezterm-work/.local/bin/devvm-guard'))
+        guard = types.ModuleType(loader.name)
+        loader.exec_module(guard)
+        # Grouping moves panes from other server windows into fresh default-size tabs,
+        # so inflate every tab: the one left in the kept window must still be fitted.
+        inflated = {}
+        for row in native_alpha():
+            inflated.setdefault(row['tab_id'], []).append(row)
+        for tab, members in inflated.items():
+            width = widest(members)
+            guard.send_resizes(native_socket, [(tab, row['pane_id'], row['size']['rows'],
+                                                row['size']['cols'] * 1496 // width, 0, 0, 144) for row in members])
+        assert widest(native_alpha()) > 1000, 'fixture tab was not inflated'
+        run()
+        # Once attached, the GUI resizes server tabs to its window anyway, so only the
+        # guard's record proves the tab was fitted before the attach could adopt it.
+        trips = root / 'state/trips.log'
+        fits = [json.loads(line) for line in trips.read_text().splitlines()] if trips.exists() else []
+        assert any(f['guard'] == 'fit' and f['host'] == 'host-a' and int(f['before'].split('x')[0]) > 1000
+                   for f in fits), ('oversized tab was not fitted', fits)
+        rows = wait_for(lambda: [p for p in listing() if p['workspace'] == 'devservers' and p['title'].startswith('DEVVM_')],
+                        'attached test panes')
+        alpha = next(p['pane_id'] for p in rows if p['title'] == 'DEVVM_ALPHA')
+        beta = next(p['pane_id'] for p in rows if p['title'] == 'DEVVM_BETA')
+        original_content = {p: wait_for(lambda: re.search(r'SESSION=(\d+)', cli('get-text', '--pane-id', str(p))),
+                                       'attached process output').group(0) for p in (alpha, beta)}
+        assert not any(p['title'] == 'dotfiles-domain-menu' for p in listing()), 'inherited menu survived migration'
+        main = next(p['window_id'] for p in listing() if p['pane_id'] == alpha and p['workspace'] == 'devservers')
+        assert any(p['pane_id'] == beta and p['window_id'] == main for p in listing())
+        locations = {(p['window_id'], p['tab_id']) for p in listing() if p['pane_id'] == alpha}
+        assert len(locations) == 1, 'a remote pane has competing tab layouts after merge'
+        def focused_row():
+            path = root / ('active-' + str(main) + '.json')
+            return json.loads(path.read_text()) if path.exists() else None
+        run('beta')
+        wait_for(lambda: focused_row() and focused_row()['domain'] in ('devserver:host-b', 'devserver:host-b:alternate'), 'host selection focuses its tab')
+        run('local')
+        wait_for(lambda: focused_row() and focused_row()['domain'] == 'local', 'local shortcut focuses the local tab')
+
+        geometry_probe = r"""
+local function capture(g)
+ local t=g:active_tab();local data={size=t:get_size(),panes={}}
+ for _,v in ipairs(t:panes_with_info()) do
+  local d=v.pane:get_dimensions()
+  table.insert(data.panes,{id=v.pane:pane_id(),left=v.left,top=v.top,width=v.width,height=v.height,cols=d.cols,rows=d.viewport_rows})
+ end
+ return data
+end
+local function save(name,data)
+ local f=assert(io.open('__ROOT__/' .. name .. '.json.tmp','w'));f:write(w.json_encode(data));f:close();os.rename('__ROOT__/' .. name .. '.json.tmp','__ROOT__/' .. name .. '.json')
+end
+w.time.call_after(0.1,function()
+ if w.GLOBAL.geometry_test_started then return end
+ w.GLOBAL.geometry_test_started=true
+ local mw=w.mux.get_window(__MAIN__);local g=mw:gui_window();local pane=w.mux.get_pane(__ALPHA__)
+ for i,t in ipairs(mw:tabs()) do
+  for _,p in ipairs(t:panes()) do if p:pane_id()==__ALPHA__ then g:perform_action(w.action.ActivateTab(i-1),p) end end
+ end
+ local checks=0
+ local function wait_panes(count,done)
+  local function ready()
+   checks=checks+1
+   if #g:active_tab():panes()==count then done()
+   elseif checks<100 then w.time.call_after(0.05,ready) else save('geometry-failure',capture(g)) end
+  end
+  ready()
+ end
+ local function resize(width,height,done)
+  g:set_inner_size(width,height)
+  local function ready()
+   checks=checks+1
+   local d=g:get_dimensions()
+   if d.pixel_width==width and d.pixel_height==height then done()
+   elseif checks<100 then w.time.call_after(0.05,ready) else save('geometry-failure',capture(g)) end
+  end
+  ready()
+ end
+ resize(2000,1200,function()
+  save('geometry-before',capture(g))
+  for _,binding in ipairs(c.keys) do if binding.key=='d' and binding.mods=='CMD' then g:perform_action(binding.action,pane);break end end
+  wait_panes(2,function()
+  save('geometry-right',capture(g))
+  for _,binding in ipairs(c.keys) do if binding.key=='d' and binding.mods=='CMD|SHIFT' then g:perform_action(binding.action,g:active_pane());break end end
+  wait_panes(3,function()
+  save('geometry-down',capture(g))
+  resize(1000,800,function()
+   save('geometry-small',capture(g))
+   resize(2000,1200,function() save('geometry-large',capture(g)) end)
+  end)
+  end)
+  end)
+ end)
+end)
+"""
+        geometry_probe = geometry_probe.replace('__ROOT__',str(root)).replace('__MAIN__',str(main)).replace('__ALPHA__',str(alpha))
+        base_gui = gui_config.read_text()
+        gui_config.write_text(base_gui.replace('return c',geometry_probe+'\nreturn c'))
+        wait_for(lambda: (root/'geometry-large.json').exists(), 'native split/resize geometry')
+        geometry = {name:json.loads((root/('geometry-'+name+'.json')).read_text()) for name in ['before','right','down','small','large']}
+        before_size = geometry['before']['size']
+        for name,data in geometry.items():
+            cols,rows=data['size']['cols'],data['size']['rows']
+            for pane in data['panes']:
+                assert pane['left']+pane['width']<=cols and pane['top']+pane['height']<=rows, (name,'pane out of frame',data)
+                assert pane['width']==pane['cols'] and pane['height']==pane['rows'], (name,'terminal viewport disagrees with split',data)
+        for name in ['right','down','large']:
+            assert geometry[name]['size']==before_size, (name,'split replaced the window size',geometry[name])
+        right=geometry['right']['panes']
+        assert len(right)==2 and abs(right[0]['width']-right[1]['width'])<=1, ('uneven Cmd+D split',right)
+        down=geometry['down']['panes']
+        assert len(down)==3, down
+        pair=[q for q in down if q['left']>0]
+        assert len(pair)==2 and abs(pair[0]['height']-pair[1]['height'])<=1, ('uneven Cmd+Shift+D split',pair)
+        for pane in down:
+            if pane['id']!=alpha: cli('kill-pane','--pane-id',str(pane['id']))
+        wait_for(lambda: sum(row['tab_id']==next(r['tab_id'] for r in listing() if r['pane_id']==alpha) for row in listing())==1, 'owned geometry panes closed')
+        gui_config.write_text(base_gui)
+        print('PASS: equal Cmd+D/Cmd+Shift+D splits and in-frame terminal geometry after window resize')
+
+        split = int(cli('split-pane', '--pane-id', str(alpha), '--', '/bin/sh', '-c',
+                        "printf '\033]0;DEVVM_ALPHA_SPLIT\007\nSESSION=%s\n' \"$$\"; exec /bin/sh").strip())
+        split_content = wait_for(lambda: re.search(r'SESSION=(\d+)', cli('get-text', '--pane-id', str(split))), 'split process marker').group(0)
+        alpha_content, beta_content = original_content[alpha], original_content[beta]
+        process_titles = {alpha_content: 'DEVVM_ALPHA', beta_content: 'DEVVM_BETA', split_content: 'DEVVM_ALPHA_SPLIT'}
+
+        def session_windows(marker):
+            windows = set()
+            for row in listing():
+                if row['workspace'] == 'devservers' and row['title'] == process_titles[marker]:
+                    windows.add(row['window_id'])
+            return windows
+
+        def relay_pid(short):
+            return json.loads((root / 'state/relays' / (short + '.json')).read_text())['pid']
+        before_relocation = relay_pid('host-a')
+        run('detach', 'alpha')
+        assert relay_pid('host-a') != before_relocation, 'relocation reused the relay and its stale connections'
+        detached = next(iter(wait_for(lambda: session_windows(alpha_content), 'detached original process')))
+        assert detached != main
+        assert session_windows(alpha_content) == {detached}
+        assert session_windows(split_content) == {detached}
+        assert session_windows(beta_content) == {main}
+        clients = json.loads(cli('list-clients', '--format', 'json'))
+        assert all(c['workspace'] == 'devservers' for c in clients), 'detach focused a stale source window'
+
+        run('alpha')
+        assert session_windows(alpha_content) == {detached}, 'open should focus detached host'
+        run('merge', 'alpha')
+        wait_for(lambda: all(session_windows(marker) == {main} for marker in (alpha_content, beta_content, split_content)), 'merged process membership')
+        run('detach', 'alpha')
+        run('detach', 'beta')
+        assert any(p['window_id'] == main and p['workspace'] == 'devservers' for p in listing()), 'local anchor lost'
+        run('merge')
+        run()
+        relays = root / 'state/relays'
+        for short in ('host-a', 'host-b'):
+            # WezTerm's detach leaves connections open; a stale one beside the live
+            # domain fed the focus loop that pinned the GUI, so relocation must close them.
+            wait_for(lambda: (relays / (short + '.connections')).read_text() == '1',
+                     short + ' has exactly one connection after detach/merge cycles')
+        assert 'PaneFocused notification' not in (root / 'gui.log').read_text(), 'GUI logged focus reconciliation errors'
+        rows = listing()
+        for marker in (alpha_content, beta_content, split_content):
+            os.kill(int(marker.split('=')[1]), 0)
+            assert sum(row['title'] == process_titles[marker] for row in rows) == 1, 'process has multiple GUI layouts'
+        assert all(session_windows(marker) == {main} for marker in (alpha_content, beta_content, split_content)), 'original process was replaced or misplaced'
+        assert any(p['pane_id'] == personal and p['workspace'] == 'personal' for p in rows), 'unrelated local session changed'
+        # A destination that closes while the server is prepared must fail the request,
+        # not crash the GUI by attaching into a window id that no longer exists.
+        close_flag.touch()
+        failed = subprocess.run([str(repo / 'wezterm-work/.local/bin/devvm'), 'detach', 'beta'], env=env,
+                                capture_output=True, text=True, timeout=45)
+        assert gui.poll() is None, 'GUI crashed attaching into a closed window'
+        assert failed.returncode != 0 and 'closed while preparing' in failed.stderr, failed.stdout + failed.stderr
+        assert not close_flag.exists(), 'the destination-closing hook never ran'
+        print('PASS: a destination closed during preparation fails the request without crashing the GUI')
+        # Cancelling devvm (Ctrl+C) releases its lock but not the GUI's accepted relocation,
+        # so the GUI itself must hold later requests until that relocation finishes.
+        slow_flag.touch()
+        cancelled = subprocess.Popen([str(repo / 'wezterm-work/.local/bin/devvm'), 'detach', 'alpha'], env=env,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        wait_for((root / 'group-started').exists, 'slow relocation started')
+        os.killpg(cancelled.pid, signal.SIGINT)
+        cancelled.wait(timeout=5)
+        run('local')
+        assert (root / 'group-finished').exists(), 'a request overlapped a cancelled relocation'
+        wait_for(lambda: subprocess.run(['pgrep', '-f', '--request ' + str(root / 'state')],
+                                        capture_output=True).returncode != 0,
+                 'cancelled request pane exits once its request is gone')
+        wait_for(lambda: session_windows(alpha_content) - {main}, 'cancelled detach completes')
+        run('merge', 'alpha')
+        print('PASS: a cancelled relocation still blocks later requests, and its request pane exits')
+        new_env = dict(env)
+        new_env.pop('WEZTERM_UNIX_SOCKET', None)
+        native_env = dict(env, WEZTERM_UNIX_SOCKET=forwards['host-b']['outbound_udses']['test']['src_socket_path'])
+        def native_beta():
+            return json.loads(subprocess.check_output([wezterm, '-n', 'cli', 'list', '--format', 'json'], env=native_env, text=True))
+        before = {p['pane_id'] for p in native_beta()}
+        run('beta')
+        wait_for(lambda: focused_row() and focused_row()['domain'].startswith('devserver:host-b'), 'beta selected for alias recovery')
+        current = focused_row()['domain']
+        alternate = 'devserver:host-b' if current.endswith(':alternate') else 'devserver:host-b:alternate'
+        cli('spawn', '--domain-name', alternate, '--window-id', str(main), '--cwd', str(root),
+            '--', '/bin/sh', '-c', reader)
+        wait_for(lambda: sum(p['title'] == 'DEVVM_BETA' for p in listing()) == 2, 'both aliases attached')
+        owned_native = {p['pane_id'] for p in native_beta()} - before
+        assert len(owned_native) == 1
+        run('beta')
+        wait_for(lambda: sum(p['title'] == 'DEVVM_BETA' for p in listing()) == 1, 'extra alias retired')
+        for pane_id in owned_native:
+            subprocess.run([wezterm, '-n', 'cli', 'kill-pane', '--pane-id', str(pane_id)], env=native_env, check=True, capture_output=True)
+        wait_for(lambda: {p['pane_id'] for p in native_beta()} == before, 'owned alias probe removed')
+        for height in (1, 8):
+            subprocess.run([wezterm, '-n', 'cli', 'split-pane', '--pane-id', str(native_panes['host-b']),
+                            '--bottom', '--top-level', '--cells', str(height), '--', '/bin/bash', '-c', menu_reader],
+                           env=native_env, check=True, capture_output=True, text=True)
+        wait_for(lambda: sum(p['title'] == 'dotfiles-domain-menu' for p in native_beta()) == 2, 'inherited menus before direct attachment')
+        second = subprocess.Popen([str(app / 'wezterm-gui'), '--config-file', str(gui_config), 'start',
+                                   '--always-new-process', '--class', 'devvm-native-tabs-' + str(os.getpid()),
+                                   '--domain', 'devserver:host-b', '--attach'], stdout=log, stderr=log, env=new_env)
+        processes.append(second)
+        second_socket = Path.home() / '.local/share/wezterm' / ('gui-sock-' + str(second.pid))
+        wait_for(second_socket.exists, 'second GUI attachment')
+        wait_for(lambda: not any(p['title'] == 'dotfiles-domain-menu' for p in native_beta()), 'direct attachment cleans inherited menus')
+        # The next scheduled status updates must not spawn any terminal chrome.
+        time.sleep(2)
+        after = native_beta()
+        assert {p['pane_id'] for p in after} == before, 'fresh GUI created terminal panes'
+        assert not any(p['title'] == 'dotfiles-domain-menu' for p in after), 'fresh GUI resurrected a footer'
+        print('PASS: native mixed-domain tabs, inherited-menu cleanup, fresh GUI attachment, detach/merge and session preservation')
+    except Exception:
+        if 'cli' in locals():
+            try:
+                for pane in listing():
+                    print('PANE:', {key: pane[key] for key in ('window_id', 'tab_id', 'pane_id', 'workspace', 'title')})
+                    if pane['title'] != 'dotfiles-domain-menu':
+                        print(cli('get-text', '--pane-id', str(pane['pane_id']))[-1500:])
+            except Exception as error:
+                print('diagnostic failed:', error)
+        for path in (root / 'state').rglob('request.json*'):
+            print(path.name + ': ' + path.read_text())
+        for path in root.glob('*.log'):
+            print(path.name + ':\n' + path.read_text()[-5000:])
+        raise
+    finally:
+        subprocess.run(['pkill', '-f', 'devvm-guard relay .* ' + str(root) + '/'])
+        for process in reversed(processes):
+            process.terminate()
+        for process in reversed(processes):
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait()
+PY

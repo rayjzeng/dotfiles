@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""Runaway-loop guards for WezTerm devserver domains.
+
+relay     Sits between a WezTerm unix domain and its Enkaku forward. WezTerm's
+          ClientDomain::detach does not close its connection, and a lingering
+          client on the same remote mux can feed a focus loop that pins the GUI.
+          devvm restarts the relay on every relocation so stale connections are
+          closed before the alternate domain attaches. The relay also trips when
+          focus PDUs run away, closing the host's connections.
+watchdog  Watches the GUI log from outside the GUI, because a flooded GUI main
+          thread cannot run Lua timers. A runaway error loop trips every relay.
+fit       Shrinks server tabs larger than the attaching window before attach. A
+          new GUI window adopts its tab's stored size, and a 1,496-column tab
+          (one stale pane resize widens the whole tab) overflowed the GPU
+          viewport and aborted the renderer.
+"""
+import argparse, asyncio, fcntl, json, os, shutil, signal, socket, subprocess, sys, time
+from pathlib import Path
+
+SET_FOCUSED_PANE, PANE_FOCUSED = 45, 53
+UNIT_RESPONSE, RESIZE = 10, 14
+# Human-driven focus changes are a few per second; the observed loop ran ~4,500/s.
+FOCUS_PDUS_PER_SECOND = 100
+# Normal GUI logging is a few lines per minute; the observed loop wrote ~2.5 MB/s.
+LOG_BYTES_PER_SECOND = 256 * 1024
+TRIP_AFTER_SECONDS = 3
+# Each refit absorbs the previous pass's clamping overshoot; one or two passes suffice
+# unless a tab has more panes than the limit has cells, which can never fit.
+FIT_PASSES = 4
+
+
+def read_leb128(buffer, offset):
+    value = shift = 0
+    while offset < len(buffer):
+        byte = buffer[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, offset
+        shift += 7
+    return None, offset
+
+
+def leb128(value):
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def scaled_span(start, length, total, target):
+    """Map a pane's span onto target cells, keeping shared split borders aligned.
+
+    Scaling each span's start and its end-plus-separator with one function means
+    neighbours agree on their border, so the split tree stays consistent.
+    """
+    scale = (target + 1) / (total + 1)
+    new_start = round(start * scale)
+    new_end = round((start + length + 1) * scale) - 1
+    return max(1, new_end - new_start)
+
+
+def fit_plan(panes, cols, rows):
+    """Return (tab_id, pane_id, rows, cols, pixel_width, pixel_height, dpi) resizes
+    that shrink every tab larger than cols x rows to fit, as `wezterm cli list` rows."""
+    extents = tab_extents(panes)
+    plan = []
+    for pane in panes:
+        width, height = extents[pane['tab_id']]
+        if width <= cols and height <= rows:
+            continue
+        size = pane['size']
+        new_cols = scaled_span(pane['left_col'], size['cols'], width, min(width, cols))
+        new_rows = scaled_span(pane['top_row'], size['rows'], height, min(height, rows))
+        cell_width = size['pixel_width'] // max(size['cols'], 1)
+        cell_height = size['pixel_height'] // max(size['rows'], 1)
+        plan.append((pane['tab_id'], pane['pane_id'], new_rows, new_cols,
+                     new_cols * cell_width, new_rows * cell_height, size['dpi']))
+    return plan
+
+
+def send_resizes(socket_path, plan):
+    """Apply a fit_plan through the mux protocol, as a GUI does when its window resizes."""
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.connect(str(socket_path))
+        connection.settimeout(10)
+        reader = connection.makefile('rb')
+        for serial, resize in enumerate(plan, start=1):
+            body = leb128(serial) + leb128(RESIZE) + b''.join(leb128(v) for v in resize)
+            connection.sendall(leb128(len(body)) + body)
+            while True:
+                header = reader.read(1)
+                length_bytes = bytearray(header)
+                while length_bytes[-1] & 0x80:
+                    length_bytes += reader.read(1)
+                length, _ = read_leb128(length_bytes, 0)
+                payload = reader.read(length & ~(1 << 63))
+                reply_serial, offset = read_leb128(payload, 0)
+                ident, _ = read_leb128(payload, offset)
+                if reply_serial:  # serial 0 is an unsolicited notification
+                    break
+            if ident != UNIT_RESPONSE:
+                raise RuntimeError(f'server rejected resizing pane {resize[1]} (reply {ident})')
+
+
+def tab_extents(panes):
+    """Return {tab_id: (cols, rows)} for `wezterm cli list` rows."""
+    extents = {}
+    for pane in panes:
+        cols, rows = extents.get(pane['tab_id'], (0, 0))
+        extents[pane['tab_id']] = (max(cols, pane['left_col'] + pane['size']['cols']),
+                                   max(rows, pane['top_row'] + pane['size']['rows']))
+    return extents
+
+
+def fit_tabs(wezterm, socket_path, cols, rows):
+    """Shrink oversized tabs on the mux at socket_path; return {tab_id: (cols, rows)} before fitting."""
+    env = dict(os.environ, WEZTERM_UNIX_SOCKET=str(socket_path))
+    env.pop('WEZTERM_PANE', None)
+
+    def cli(*args):
+        return subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=env, check=True,
+                              capture_output=True, text=True, timeout=10).stdout
+
+    panes = json.loads(cli('list', '--format', 'json'))
+    extents = tab_extents(panes)
+    oversized = {tab: extents[tab] for tab, *_ in fit_plan(panes, cols, rows)}
+    # The server skips rebuilding a zoomed tab's size, so unzoom before resizing.
+    zoomed = [p for p in panes if p['tab_id'] in oversized and p['is_zoomed']]
+    for pane in zoomed:
+        cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--unzoom')
+    try:
+        if zoomed:
+            panes = json.loads(cli('list', '--format', 'json'))
+        # Panes too narrow to shrink are clamped to one cell, which can push a scaled
+        # layout past the limit, so refit from the server's real geometry until it fits.
+        for _ in range(FIT_PASSES):
+            plan = fit_plan(panes, cols, rows)
+            if not plan:
+                return oversized
+            send_resizes(socket_path, plan)
+            panes = json.loads(cli('list', '--format', 'json'))
+        raise RuntimeError(f'tabs still exceed {cols}x{rows} after {FIT_PASSES} fitting passes')
+    finally:
+        for pane in zoomed:
+            cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--zoom')
+
+
+class PduCounter:
+    """Counts watched PDU idents in a WezTerm mux byte stream without altering it."""
+
+    def __init__(self, idents):
+        self.idents = idents
+        self.pending = bytearray()
+        self.skip = 0
+        self.hits = 0
+        self.lost_sync = False
+
+    def feed(self, data):
+        if self.lost_sync:
+            return
+        self.pending += data
+        while True:
+            if self.skip:
+                consumed = min(self.skip, len(self.pending))
+                del self.pending[:consumed]
+                self.skip -= consumed
+                if self.skip:
+                    return
+            length, offset = read_leb128(self.pending, 0)
+            if length is None:
+                return
+            length &= ~(1 << 63)  # compression flag
+            serial, after_serial = read_leb128(self.pending, offset)
+            if serial is None:
+                return
+            ident, _ = read_leb128(self.pending, after_serial)
+            if ident is None:
+                return
+            if length > 1 << 32:
+                self.lost_sync = True
+                return
+            if ident in self.idents:
+                self.hits += 1
+            self.skip = offset + length
+
+
+class Breaker:
+    """Trips once a per-second rate stays above its limit for TRIP_AFTER_SECONDS samples."""
+
+    def __init__(self, limit):
+        self.limit = limit
+        self.streak = 0
+
+    def sample(self, rate):
+        self.streak = self.streak + 1 if rate > self.limit else 0
+        return self.streak >= TRIP_AFTER_SECONDS
+
+
+def log_guard_event(state_dir, **fields):
+    with open(state_dir / 'trips.log', 'a') as log:
+        log.write(json.dumps({'time': time.strftime('%Y-%m-%dT%H:%M:%S'), **fields}) + '\n')
+
+
+def record_trip(state_dir, **fields):
+    log_guard_event(state_dir, **fields)
+    if shutil.which('osascript'):
+        message = fields['reason'].replace('\\', '').replace('"', "'")
+        subprocess.run(['osascript', '-e', f'display notification "{message}" with title "WezTerm guard"'],
+                       capture_output=True, timeout=5)
+
+
+async def relay(listen, upstream, host, state_dir):
+    counters, writers = [], set()
+    # Lets tests and humans check the one-connection-per-host invariant directly.
+    connections = listen.with_suffix('.connections')
+
+    def publish_connections():
+        connections.write_text(str(len(counters) // 2))
+
+    async def pump(reader, writer, counter):
+        try:
+            while data := await reader.read(65536):
+                counter.feed(data)
+                writer.write(data)
+                await writer.drain()
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            writer.close()
+
+    async def handle(client_reader, client_writer):
+        try:
+            server_reader, server_writer = await asyncio.open_unix_connection(upstream)
+        except OSError:
+            client_writer.close()
+            return
+        up, down = PduCounter({SET_FOCUSED_PANE}), PduCounter({PANE_FOCUSED})
+        pair = (client_writer, server_writer)
+        counters.extend((up, down))
+        writers.update(pair)
+        publish_connections()
+        try:
+            await asyncio.gather(pump(client_reader, server_writer, up), pump(server_reader, client_writer, down))
+        finally:
+            counters.remove(up)
+            counters.remove(down)
+            writers.difference_update(pair)
+            publish_connections()
+
+    server = await asyncio.start_unix_server(handle, str(listen))
+    publish_connections()
+    breaker, seen = Breaker(FOCUS_PDUS_PER_SECOND), {}
+    while True:
+        await asyncio.sleep(1)
+        rate = sum(c.hits - seen.get(id(c), 0) for c in counters)
+        seen = {id(c): c.hits for c in counters}
+        if breaker.sample(rate):
+            break
+    server.close()
+    for writer in list(writers):
+        writer.close()
+    remove_endpoints(listen)
+    record_trip(state_dir, guard='relay', host=host, focus_pdus_per_second=rate,
+                reason=f'{host}: focus loop ({rate}/s) — disconnected; reopen with devvm {host}')
+    return 1
+
+
+def watchdog(state_dir, log_dir, gui):
+    # One watchdog per GUI, not per state dir: a restarted or second GUI must not be
+    # turned away by a watchdog that is still watching a different GUI process.
+    lock_path = state_dir / 'watchdogs' / f'{gui}.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = open(lock_path, 'a')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return 0
+    try:
+        watch_log(state_dir, log_dir / f'wezterm-gui-log-{gui}.txt', gui)
+    finally:
+        lock_path.unlink(missing_ok=True)
+    return 0
+
+
+def watch_log(state_dir, log, gui):
+    """Stop every relay whenever the GUI's log floods, until the GUI exits."""
+    breaker, last = Breaker(LOG_BYTES_PER_SECOND), None
+    while is_alive(gui):
+        time.sleep(1)
+        try:
+            size = log.stat().st_size
+        except FileNotFoundError:
+            continue
+        rate, last = (0 if last is None else size - last), size
+        if not breaker.sample(rate):
+            continue
+        relays = stop_relays(state_dir)
+        record_trip(state_dir, guard='watchdog', gui_pid=gui, log_bytes_per_second=rate, relays=relays,
+                    reason=f'WezTerm error loop ({rate // 1024} KB/s of log) — disconnected '
+                           f'{len(relays)} devserver(s); restart WezTerm if lag persists')
+        breaker.streak = -60  # give the GUI a minute to drain before judging again
+
+
+def is_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def remove_endpoints(listen):
+    """Remove a relay's socket and connection count so neither outlives it."""
+    listen.unlink(missing_ok=True)
+    listen.with_suffix('.connections').unlink(missing_ok=True)
+
+
+def relay_paths(state_dir, host):
+    base = state_dir / 'relays' / host
+    return base.with_suffix('.sock'), base.with_suffix('.json')
+
+
+def recorded_relay(state_dir, host):
+    """Return host's last relay record ({pid, upstream}), whether or not it still runs."""
+    try:
+        return json.loads(relay_paths(state_dir, host)[1].read_text())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def is_running(host, relay):
+    command = subprocess.run(['ps', '-o', 'command=', '-p', str(relay['pid'])],
+                             capture_output=True, text=True).stdout
+    return f'devvm-guard relay {host} ' in command
+
+
+def stop_relay(state_dir, host):
+    """Stop host's relay and wait, so its exit cannot remove a successor's socket."""
+    relay = recorded_relay(state_dir, host)
+    if not relay or not is_running(host, relay):
+        return False
+    try:
+        os.kill(relay['pid'], signal.SIGTERM)
+        deadline = time.monotonic() + 2
+        while is_running(host, relay):
+            if time.monotonic() >= deadline:
+                os.kill(relay['pid'], signal.SIGKILL)
+                break
+            time.sleep(0.02)
+    except ProcessLookupError:
+        pass  # it exited on its own after the liveness check
+    return True
+
+
+def stop_relays(state_dir):
+    """Stop every relay, each under its host lock so no replacement interleaves."""
+    stopped = []
+    for record in sorted((state_dir / 'relays').glob('*.json')):
+        with lock_host(state_dir, record.stem):
+            if stop_relay(state_dir, record.stem):
+                stopped.append(record.stem)
+    return stopped
+
+
+def lock_host(state_dir, host):
+    """Hold host's relay lock until the returned file closes.
+
+    Unserialized replacements can orphan a relay whose PID was never recorded,
+    and restart cannot close the stale connections such a relay carries.
+    """
+    path = relay_paths(state_dir, host)[1].with_suffix('.lock')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = open(path, 'a')
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+
+def start_relay(state_dir, host, upstream):
+    """Replace host's relay, closing every connection the old one carried."""
+    stop_relay(state_dir, host)
+    listen, record = relay_paths(state_dir, host)
+    listen.parent.mkdir(parents=True, exist_ok=True)
+    listen.unlink(missing_ok=True)
+    with open(listen.with_suffix('.log'), 'a') as log:
+        process = subprocess.Popen([sys.executable, '-I', __file__, 'relay', host, str(upstream), str(state_dir)],
+                                   stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    record.write_text(json.dumps({'pid': process.pid, 'upstream': str(upstream)}))
+    deadline = time.monotonic() + 5
+    while not listen.is_socket():
+        if process.poll() is not None or time.monotonic() >= deadline:
+            raise SystemExit(f'devvm-guard: relay for {host} did not start')
+        time.sleep(0.02)
+    return listen
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest='command', required=True)
+    for name in ('ensure', 'restart', 'relay'):
+        command = commands.add_parser(name)
+        command.add_argument('host')
+        if name != 'restart':
+            command.add_argument('upstream', type=Path)
+        command.add_argument('state_dir', type=Path)
+    run_watchdog = commands.add_parser('watchdog')
+    run_watchdog.add_argument('state_dir', type=Path)
+    run_watchdog.add_argument('log_dir', type=Path)
+    run_watchdog.add_argument('gui_pid', type=int)
+    run_fit = commands.add_parser('fit')
+    run_fit.add_argument('host')
+    run_fit.add_argument('state_dir', type=Path)
+    run_fit.add_argument('wezterm')
+    run_fit.add_argument('socket', type=Path)
+    run_fit.add_argument('cols', type=int)
+    run_fit.add_argument('rows', type=int)
+    args = parser.parse_args()
+    if args.command == 'watchdog':
+        return watchdog(args.state_dir, args.log_dir, args.gui_pid)
+    if args.command == 'fit':
+        for tab, (cols, rows) in sorted(fit_tabs(args.wezterm, args.socket, args.cols, args.rows).items()):
+            log_guard_event(args.state_dir, guard='fit', host=args.host, tab=tab,
+                            before=f'{cols}x{rows}', limit=f'{args.cols}x{args.rows}')
+            print(f'fitted tab {tab} from {cols}x{rows} to fit {args.cols}x{args.rows}')
+        return 0
+    listen = relay_paths(args.state_dir, args.host)[0]
+    if args.command == 'relay':
+        signal.signal(signal.SIGTERM, lambda *_: (remove_endpoints(listen), sys.exit(0)))
+        return asyncio.run(relay(listen, args.upstream, args.host, args.state_dir))
+    with lock_host(args.state_dir, args.host):
+        current = recorded_relay(args.state_dir, args.host)
+        if args.command == 'ensure':
+            healthy = (current and current['upstream'] == str(args.upstream)
+                       and is_running(args.host, current) and listen.is_socket())
+            if not healthy:
+                start_relay(args.state_dir, args.host, args.upstream)
+        else:
+            if not current:
+                raise SystemExit(f'devvm-guard: no relay recorded for {args.host}; run devvm {args.host}')
+            start_relay(args.state_dir, args.host, current['upstream'])
+    print(listen)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

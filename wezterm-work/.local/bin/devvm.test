@@ -1,0 +1,271 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+devvm="$script_dir/devvm"
+test_dir=$(mktemp -d /tmp/devvm-test.XXXXXX)
+trap 'result=$?; if ((result != 0)); then cat "$test_dir/output"; fi; pkill -f "devvm-guard relay .* $test_dir/" || true; rm -rf "$test_dir"' EXIT
+export DEVVM_CONFIG_DIR="$test_dir/config"
+export DEVVM_SOCKET_DIR="$test_dir/sockets"
+export DEVVM_STATE_DIR="$test_dir/state"
+mkdir -p "$DEVVM_CONFIG_DIR" "$DEVVM_SOCKET_DIR"
+
+expect_failure() {
+  if "$devvm" "$@" >"$test_dir/output" 2>&1; then
+    printf 'expected failure: %s\n' "$*" >&2
+    exit 1
+  fi
+}
+
+expect_failure ls
+grep -q 'devvm init' "$test_dir/output"
+
+cat >"$DEVVM_CONFIG_DIR/devservers" <<'HOSTS'
+# host alias
+devvm123.example.test primary
+devvm124.example.test secondary # inline comment
+
+HOSTS
+"$devvm" ls >"$test_dir/output"
+grep -q 'devvm123.example.test.*primary' "$test_dir/output"
+grep -q 'devvm124.example.test.*secondary' "$test_dir/output"
+
+cp "$DEVVM_CONFIG_DIR/devservers" "$test_dir/original"
+expect_failure rm 12
+grep -q 'ambiguous' "$test_dir/output"
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure rm nonexistent
+grep -q 'no host' "$test_dir/output"
+expect_failure add devvm125.example.test primary
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure add devvm123.another.test other
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure add 'bad/host' third
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+
+# Short names and aliases share one namespace, or a selector resolves to two hosts.
+expect_failure add devvm125.example.test devvm124
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+expect_failure add primary.example.test
+cmp "$test_dir/original" "$DEVVM_CONFIG_DIR/devservers"
+mkdir "$test_dir/colliding-config"
+printf 'alpha.example.test beta\nbeta.example.test gamma\n' >"$test_dir/colliding-config/devservers"
+DEVVM_CONFIG_DIR="$test_dir/colliding-config" expect_failure ls
+grep -q 'duplicate hostname or alias' "$test_dir/output"
+printf 'alpha.example.test alpha\n' >"$test_dir/colliding-config/devservers"
+DEVVM_CONFIG_DIR="$test_dir/colliding-config" "$devvm" ls >/dev/null
+
+"$devvm" add devvm125.example.test third
+"$devvm" rm third
+! grep -q devvm125 "$DEVVM_CONFIG_DIR/devservers"
+"$devvm" rm primary
+! grep -q devvm123 "$DEVVM_CONFIG_DIR/devservers"
+grep -q devvm124 "$DEVVM_CONFIG_DIR/devservers"
+
+cat >"$test_dir/ek" <<'EK'
+#!/bin/bash
+case "$1" in
+  status) printf '%s\n' '{"status":{"daemon_status":{"connections":{"peer":{"hostname":"devvm124.example.test","outbound_udses":{"forward":{"dst_socket_path":"/run/user/1000/wezterm/sock","src_socket_path":"PLACEHOLDER"}}}}}}}' ;;
+  run) exit 0 ;;
+  *) exit 1 ;;
+esac
+EK
+python3 - "$test_dir" <<'PY'
+import socket, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+server = socket.socket(socket.AF_UNIX)
+server.bind(str(root / 'mux.sock'))
+path = root / 'ek'
+path.write_text(path.read_text().replace('PLACEHOLDER', str(root / 'mux.sock')))
+PY
+chmod +x "$test_dir/ek"
+export DEVVM_EK="$test_dir/ek"
+cat >"$test_dir/wezterm" <<'WT'
+#!/bin/bash
+[[ $1 == -n ]] && { printf '[]\n'; exit 0; }
+exit 1
+WT
+chmod +x "$test_dir/wezterm"
+export DEVVM_WEZTERM="$test_dir/wezterm"
+"$devvm" --ensure devvm124.example.test
+test "$(readlink "$DEVVM_SOCKET_DIR/devvm124.sock")" = "$DEVVM_STATE_DIR/relays/devvm124.sock"
+test -S "$DEVVM_STATE_DIR/relays/devvm124.sock"
+grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
+
+# A killed mux server leaves its socket and Enkaku forward behind. ensure must
+# restart the server, reuse the old forward only if it answers again, and
+# otherwise forward afresh: a forward made for the old server only returns EOF.
+cp "$test_dir/ek" "$test_dir/ek.healthy"
+cp "$test_dir/wezterm" "$test_dir/wezterm.healthy"
+fake_killed_server() {  # $1: socket that answers once the server restarts
+  rm -f "$test_dir/restarted" "$test_dir/reforwarded"
+  python3 - "$test_dir" "$1" <<'PY'
+import socket, sys
+from pathlib import Path
+root, answering = Path(sys.argv[1]), sys.argv[2]
+fresh = root / 'fresh.sock'
+if not fresh.exists():
+    socket.socket(socket.AF_UNIX).bind(str(fresh))
+ek = root / 'ek'
+ek.write_text((root / 'ek.healthy').read_text().replace('  run) exit 0 ;;', f"""  run) touch {root}/restarted; echo /run/user/1000/wezterm/sock ;;
+  forward-uds) touch {root}/reforwarded; printf '{{"src_socket_path": "{fresh}"}}\\n' ;;"""))
+(root / 'wezterm').write_text(f"""#!/bin/bash
+[[ $1 == -n && -e {root}/restarted && $WEZTERM_UNIX_SOCKET == {answering} ]] && {{ printf '[]\\n'; exit 0; }}
+exit 1
+""")
+PY
+}
+fake_killed_server "$test_dir/mux.sock"
+"$devvm" --ensure devvm124.example.test
+test -e "$test_dir/restarted"
+test ! -e "$test_dir/reforwarded"
+fake_killed_server "$test_dir/fresh.sock"
+"$devvm" --ensure devvm124.example.test
+test -e "$test_dir/restarted"
+test -e "$test_dir/reforwarded"
+grep -q "\"upstream\": \"$test_dir/fresh.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
+
+# With a dead forward listed before a live one, use the live one without restarting.
+python3 - "$test_dir" <<'PY'
+import json, socket, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+socket.socket(socket.AF_UNIX).bind(str(root / 'dead.sock'))
+ek = root / 'ek'
+text = (root / 'ek.healthy').read_text()
+marker = '"outbound_udses":{'
+dead = '"dead":{"dst_socket_path":"/run/user/1000/wezterm/sock","src_socket_path":"' + str(root / 'dead.sock') + '"},'
+ek.write_text(text.replace(marker, marker + dead).replace('  run) exit 0 ;;', f'  run) touch {root}/restarted; exit 0 ;;'))
+(root / 'wezterm').write_text(f"""#!/bin/bash
+[[ $1 == -n && $WEZTERM_UNIX_SOCKET == {root / 'mux.sock'} ]] && {{ printf '[]\\n'; exit 0; }}
+exit 1
+""")
+PY
+rm -f "$test_dir/restarted"
+"$devvm" --ensure devvm124.example.test
+test ! -e "$test_dir/restarted"
+grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
+
+# A forward whose remote end is gone still accepts, so a probe of it must time
+# out rather than block ensure from reaching the live forward behind it.
+cat >"$test_dir/wezterm" <<WT
+#!/bin/bash
+[[ \$1 == -n && \$WEZTERM_UNIX_SOCKET == $test_dir/dead.sock ]] && exec sleep 60
+[[ \$1 == -n && \$WEZTERM_UNIX_SOCKET == $test_dir/mux.sock ]] && { printf '[]\n'; exit 0; }
+exit 1
+WT
+python3 - "$devvm" <<'PY'
+import subprocess, sys
+subprocess.run(['/bin/bash', sys.argv[1], '--ensure', 'devvm124.example.test'], check=True, timeout=15)
+PY
+test ! -e "$test_dir/restarted"
+grep -q "\"upstream\": \"$test_dir/mux.sock\"" "$DEVVM_STATE_DIR/relays/devvm124.json"
+mv "$test_dir/ek.healthy" "$test_dir/ek"
+mv "$test_dir/wezterm.healthy" "$test_dir/wezterm"
+
+printf 'unrelated\n' >"$DEVVM_SOCKET_DIR/devvm124.sock.unrelated"
+rm "$DEVVM_SOCKET_DIR/devvm124.sock"
+printf 'do not replace\n' >"$DEVVM_SOCKET_DIR/devvm124.sock"
+expect_failure --ensure devvm124.example.test
+grep -q 'do not replace' "$DEVVM_SOCKET_DIR/devvm124.sock"
+grep -q unrelated "$DEVVM_SOCKET_DIR/devvm124.sock.unrelated"
+
+expect_failure add devvm127.example.test all
+"$devvm" add devvm126.example.test healthy
+python3 - "$test_dir" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+ek = root / 'ek'
+ek.write_text(ek.read_text().replace('devvm124.example.test', 'devvm126.example.test'))
+(root / 'wezterm').write_text('''#!/bin/bash
+if [[ $1 == -n ]]; then printf '[]\\n'; exit 0; fi
+if [[ $1 == cli ]]; then exit 1; fi
+for arg in "$@"; do
+  if [[ $arg == */devvm ]]; then [[ $arg == /* ]] || exit 1; fi
+done
+request=${!#}
+python3 - "$request" <<'REPLY'
+import json, os, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+request = json.loads(p.read_text())
+assert request['hosts'] == ['devvm126.example.test'], request
+(p.parents[2] / 'healthy-request').write_text('received')
+Path(str(p) + '.result').write_text(json.dumps({'messages': [], 'errors': []}))
+Path(str(p) + '.accepted').write_text(str(os.getpid()))
+Path(str(p) + '.consumed').touch()
+REPLY
+''')
+(root / 'wezterm').chmod(0o755)
+PY
+export DEVVM_WEZTERM="$test_dir/wezterm"
+expect_failure merge all
+test -f "$DEVVM_STATE_DIR/healthy-request"
+expect_failure
+test -f "$DEVVM_STATE_DIR/healthy-request"
+
+"$devvm" rm secondary
+export DEVVM_TEST_DIR="$test_dir"
+python3 - "$test_dir/wezterm" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+s = s.replace('request=${!#}', '''if ! mkdir "$DEVVM_TEST_DIR/inflight"; then touch "$DEVVM_TEST_DIR/overlap"; fi
+trap 'rmdir "$DEVVM_TEST_DIR/inflight"' EXIT
+sleep 0.2
+request=${!#}''')
+p.write_text(s)
+PY
+printf 'old owner is gone\n' >"$DEVVM_STATE_DIR/requests.lock"
+"$devvm" >"$test_dir/first" 2>&1 &
+first=$!
+"$devvm" >"$test_dir/second" 2>&1 &
+second=$!
+wait "$first"
+wait "$second"
+test ! -e "$test_dir/overlap"
+
+(cd "$script_dir"; /bin/bash ./devvm) >"$test_dir/relative" 2>&1
+printf 'PASS: devvm host resolution, validation, socket preservation, and relative invocation\n'
+
+# A relocation that outlasts the delivery deadline must keep the request (and its
+# lock) until the GUI replies, but must not wait on a GUI that has exited.
+cat >"$test_dir/wezterm" <<'WT'
+#!/bin/bash
+[[ $1 == -n ]] && { printf '[]\n'; exit 0; }
+[[ $1 == cli ]] && exit 1
+request=${!#}
+sleep "$DEVVM_TEST_GUI_LIFETIME" &
+printf '%s' $! >"$request.accepted.tmp"
+mv "$request.accepted.tmp" "$request.accepted"
+if [[ -n ${DEVVM_TEST_REPLY_DELAY:-} ]]; then
+  (sleep "$DEVVM_TEST_REPLY_DELAY"
+   printf '{"messages": [], "errors": []}' >"$request.result"
+   touch "$request.consumed") 2>/dev/null &
+fi
+WT
+DEVVM_TEST_GUI_LIFETIME=40 DEVVM_TEST_REPLY_DELAY=31 "$devvm" >"$test_dir/output" 2>&1
+DEVVM_TEST_GUI_LIFETIME=0.5 expect_failure
+grep -q 'WezTerm exited before finishing the request' "$test_dir/output"
+printf 'PASS: devvm keeps a long relocation request until the GUI replies or exits\n'
+
+# A GUI that accepts but never answers must fail the command, not hold the request
+# lock forever, and must not be mistaken for no GUI (which would start a second one).
+cat >"$test_dir/wezterm" <<WT
+#!/bin/bash
+[[ \$1 == cli ]] && exec sleep 60
+[[ \$1 == start ]] && touch "$test_dir/second-gui"
+exit 1
+WT
+python3 - "$devvm" "$test_dir/output" <<'PY'
+import subprocess, sys
+with open(sys.argv[2], 'w') as output:
+    result = subprocess.run(['/bin/bash', sys.argv[1], 'local'], stdout=output, stderr=output, timeout=20)
+assert result.returncode != 0, 'devvm succeeded against an unresponsive GUI'
+PY
+grep -q 'WezTerm is not responding' "$test_dir/output"
+test ! -e "$test_dir/second-gui"
+printf 'PASS: devvm fails fast on an unresponsive GUI instead of holding the request lock\n'
