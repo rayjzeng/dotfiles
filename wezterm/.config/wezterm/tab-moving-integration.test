@@ -1,0 +1,153 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "$script_dir" <<'PY'
+import json, os, subprocess, sys, tempfile, time
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+source = Path(sys.argv[1])
+app = Path('/Applications/WezTerm.app/Contents/MacOS')
+wezterm = str(app / 'wezterm')
+
+def wait_for(check, description, timeout=15):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = check()
+        if value:
+            return value
+        time.sleep(0.1)
+    raise AssertionError('timed out: ' + description)
+
+with tempfile.TemporaryDirectory(prefix='wezterm-tab-moving-', dir='/tmp') as temp:
+    root = Path(temp)
+    config_dir = root / 'config'
+    config_dir.mkdir()
+    gui = None
+    try:
+        reader = "trap '' INT; stty -echo; while IFS= read -r line; do :; done"
+        gui_config = config_dir / 'gui.lua'
+        # Capture action callbacks so a probe can drive the real picker inside this GUI. The
+        # exec domain gives local processes a second domain, so grouping has groups to keep.
+        base = ("local w=require('wezterm'); local callbacks={}; local ac=w.action_callback; "
+                "w.action_callback=function(f) local a=ac(f); callbacks[a.EmitEvent]=f; return a end; "
+                "local c=dofile(" + repr(str(source / 'wezterm.lua')) + "); "
+                "c.default_prog={'/bin/sh','-c'," + repr("printf '\\033]0;FIRST\\007'; " + reader) + "}; "
+                "c.default_cwd=" + repr(str(root)) + "; c.exit_behavior='Close'; "
+                "c.exec_domains={w.exec_domain('scratch',function(cmd) return cmd end)}; return c\n")
+        gui_config.write_text(base)
+        log = (root / 'gui.log').open('w')
+        env = dict(os.environ, DEVVM_CONFIG_DIR=str(config_dir))
+        env.pop('WEZTERM_UNIX_SOCKET', None)
+        gui = subprocess.Popen([str(app / 'wezterm-gui'), '--config-file', str(gui_config), 'start',
+                                '--always-new-process', '--class', 'tab-moving-integration-' + str(os.getpid()),
+                                '--workspace', 'personal'], stdout=log, stderr=log, env=env)
+        gui_socket = Path.home() / '.local/share/wezterm' / ('gui-sock-' + str(gui.pid))
+        wait_for(gui_socket.exists, 'isolated GUI socket')
+        env['WEZTERM_UNIX_SOCKET'] = str(gui_socket)
+
+        def cli(*args):
+            p = subprocess.run([wezterm, '-n', 'cli', '--no-auto-start', *args], env=env,
+                               capture_output=True, text=True, timeout=15)
+            assert p.returncode == 0, p.stderr
+            return p.stdout
+
+        def listing():
+            return json.loads(cli('list', '--format', 'json'))
+
+        def row(pane):
+            return next(r for r in listing() if r['pane_id'] == pane)
+
+        def spawn(title, *where):
+            return int(cli('spawn', *where, '--', '/bin/sh', '-c', f"printf '\\033]0;{title}\\007'; " + reader).strip())
+
+        first = wait_for(lambda: listing(), 'initial pane')[0]['pane_id']
+        window_a = row(first)['window_id']
+        stay = spawn('STAY', '--window-id', str(window_a))
+        target = spawn('TARGET', '--new-window', '--workspace', 'personal')
+        window_b = row(target)['window_id']
+        for title in ('SCRATCH1', 'SCRATCH2'):
+            spawn(title, '--window-id', str(window_b), '--domain-name', 'scratch')
+
+        def titles(window):
+            return ' '.join(r['title'] for r in listing() if r['window_id'] == window)
+        wait_for(lambda: titles(window_b) == 'TARGET SCRATCH1 SCRATCH2', 'second window tabs')
+
+        def pick(name, pane, *choices):
+            result = root / (name + '.json')
+            probe = """
+w.time.call_after(0.2,function()
+ if w.GLOBAL.probe=='__NAME__' then return end
+ w.GLOBAL.probe='__NAME__'
+ local ok,err=pcall(function()
+  local pane=w.mux.get_pane(__PANE__)
+  local tab=pane:tab()
+  tab:activate()
+  local gui
+  for _,g in ipairs(w.gui.gui_windows()) do if g:window_id()==tab:window():window_id() then gui=g end end
+  local selector
+  local window=setmetatable({perform_action=function(_,a,p)
+   if a.InputSelector then selector=a.InputSelector else gui:perform_action(a,p) end
+  end},
+   {__index=function(_,k) return function(_,...) return gui[k](gui,...) end end})
+  for _,key in ipairs(c.keys) do
+   if key.key=='t' and key.mods=='CMD|SHIFT' then callbacks[key.action.EmitEvent](window,pane) end
+  end
+  for _,choice in ipairs(__CHOICES__) do callbacks[selector.action.EmitEvent](window,pane,choice) end
+ end)
+ -- Report each window's active tab once the move has settled.
+ w.time.call_after(0.5,function()
+  local active={}
+  for _,mw in ipairs(w.mux.all_windows()) do active[tostring(mw:window_id())]=mw:active_tab():tab_id() end
+  local f=assert(io.open('__RESULT__.tmp','w'));f:write(w.json_encode{error=not ok and tostring(err) or nil,active=active});f:close()
+  os.rename('__RESULT__.tmp','__RESULT__')
+ end)
+end)
+""".replace('__NAME__', name).replace('__PANE__', str(pane)).replace('__CHOICES__', '{' + ','.join(json.dumps(c) for c in choices) + '}').replace('__RESULT__', str(result))
+            gui_config.write_text(base.replace('return c', probe + 'return c'))
+            outcome = json.loads(wait_for(lambda: result.exists() and result.read_text(), name + ' probe'))
+            assert 'error' not in outcome, name + ': ' + outcome['error']
+            return {int(window): tab for window, tab in outcome['active'].items()}
+
+        # The probe runs the real callbacks, so the CLI command and its GUI socket are
+        # exactly what Cmd+Shift+T builds. Grouping alone would put the local tab right
+        # after TARGET; the chosen slot must win over the status ticks during and after it.
+        active = pick('existing-window', first, 'move', f'slot:{window_b}:2')
+        moved = row(first)
+        assert moved['window_id'] == window_b, ('tab did not move into window B', listing())
+        assert titles(window_b) == 'TARGET SCRATCH1 FIRST SCRATCH2', ('tab did not land in the chosen slot', listing())
+        assert row(stay)['window_id'] == window_a, 'the other tab left its window'
+        assert active[window_b] == moved['tab_id'], ('moved tab is not active', active)
+        time.sleep(2.5)
+        assert titles(window_b) == 'TARGET SCRATCH1 FIRST SCRATCH2', ('grouping moved the placed tab', listing())
+        print('PASS: picker moves a local tab into the middle of another window of this GUI, activates it, '
+              'and grouping leaves it there')
+
+        spawn('OTHER', '--window-id', str(window_a))
+        active = pick('jump', first, 'tab:' + str(row(stay)['tab_id']))
+        assert active[window_a] == row(stay)['tab_id'], ('jump did not activate the tab in the other window', active)
+        print('PASS: picker jumps to a tab in another window')
+
+        active = pick('new-window', first, 'move', 'new-window')
+        fresh = row(first)
+        assert fresh['window_id'] not in (window_a, window_b) and fresh['workspace'] == 'personal', fresh
+        assert active[fresh['window_id']] == fresh['tab_id'], ('tab in the new window is not active', active)
+        print('PASS: picker moves a local tab to a new window in the same workspace')
+    except Exception:
+        if gui and gui.poll() is None and 'cli' in locals():
+            try:
+                for pane in listing():
+                    print('PANE:', {key: pane[key] for key in ('window_id', 'tab_id', 'pane_id', 'workspace', 'title')})
+            except Exception as error:
+                print('diagnostic failed:', error)
+        print('gui.log:\n' + (root / 'gui.log').read_text()[-5000:])
+        raise
+    finally:
+        if gui:
+            gui.terminate()
+            try:
+                gui.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                gui.kill(); gui.wait()
+PY

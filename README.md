@@ -62,9 +62,10 @@ On macOS, `Cmd` means Command and `Opt` means Option:
 
 | Shortcut | Action |
 |---|---|
-| `Cmd+T` | New tab in the active pane's domain |
+| `Cmd+T` | New tab in the active pane's domain, placed with that domain's tabs |
 | `Cmd+1` … `Cmd+8`; `Cmd+9` | Select a numbered tab; select the last tab |
-| `Cmd+Shift+T` | Tab navigator, including tabs that do not fit in the bar |
+| `Cmd+Shift+T` | Tab picker across windows; its last entry moves the current tab to any position |
+| `Cmd+Opt+Shift+Left`; `Cmd+Opt+Shift+Right` | Move the current tab left; right |
 | `Cmd+D`; `Cmd+Shift+D` | Split right; split below |
 | `Cmd+Shift+Arrow` | Select a pane in that direction |
 | `Cmd+[`; `Cmd+]` | Previous pane; next pane |

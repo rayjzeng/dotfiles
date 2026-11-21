@@ -80,8 +80,19 @@ Colors identify mux domains: SSH launched inside a Local shell still belongs to
 that Local tab, although the terminal color scheme may change.
 
 Titles are clipped to the available width. Click a tab to select it, or use
-`Cmd+Shift+T` to find tabs that do not fit in the bar. A separate per-domain
-selector is deferred.
+`Cmd+Shift+T` to find tabs in any window of the workspace, including those that
+do not fit in the bar.
+
+New tabs join their domain's group: after the last tab of that domain, in the
+first group at or after the focused tab. This covers `Cmd+T` and tabs that arrive
+any other way, such as `devvm` attaching a host. Tabs you move on purpose stay
+where you put them.
+
+WezTerm cannot drag tabs from the bar. To rearrange tabs, use
+`Cmd+Opt+Shift+Left`/`Right`, or choose **Move this tab…** at the end of the
+`Cmd+Shift+T` picker and pick a position in any window, or a new window. Within a
+window any tab can move. Only unsplit local tabs move between windows; use
+`devvm detach` and `devvm open` for server tabs.
 
 ## Keyboard shortcuts
 
@@ -93,10 +104,11 @@ loaded bindings.
 
 | Shortcut | Action |
 |---|---|
-| `Cmd+T` | Create a tab in the active pane's domain |
+| `Cmd+T` | Create a tab in the active pane's domain, grouped with that domain's tabs |
 | `Cmd+1` … `Cmd+8` | Select that numbered tab |
 | `Cmd+9` | Select the last tab |
-| `Cmd+Shift+T` | Open the tab navigator |
+| `Cmd+Shift+T` | Open the tab picker: jump to a tab, or move this tab to any position |
+| `Cmd+Opt+Shift+Left` / `Right` | Move the current tab left / right |
 | `Cmd+Opt+0` | Focus a local tab in the unified main window |
 | `Cmd+Opt+1` … `Cmd+Opt+9` | Open/focus hosts in host-list order |
 | `Cmd+Shift+O` | Open the fuzzy server picker |
