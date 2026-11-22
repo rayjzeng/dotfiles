@@ -262,6 +262,13 @@ local seen_tabs = {}
 -- because run_child_process yields and status ticks can run mid-move.
 local placed_panes = {}
 
+-- A tab the user positions by hand counts as placed, even if no status tick has
+-- seen it yet; otherwise grouping would pull it back on the next tick.
+local function mark_tab_placed(mux_window, tab_id)
+  local seen = seen_tabs[mux_window:window_id()]
+  if seen then seen.ids[tab_id] = true end
+end
+
 local function group_new_tabs(window, pane)
   local mux_window = window:mux_window()
   local order, ids, keys, unseen = {}, {}, {}, {}
@@ -310,8 +317,12 @@ wezterm.on('update-status', guarded('group-new-tabs', group_new_tabs))
 -- Spawning through the mux returns the tab synchronously, so it is grouped before
 -- the next repaint instead of jumping on the following status tick.
 local function spawn_grouped_tab(window, pane)
+  -- The focused tab may have changed since the last status tick.
+  local mux_window = window:mux_window()
+  local seen = seen_tabs[mux_window:window_id()]
+  if seen then seen.active = mux_window:active_tab():tab_id() end
   local cwd = pane:get_current_working_dir()
-  local tab = window:mux_window():spawn_tab {
+  local tab = mux_window:spawn_tab {
     domain = { DomainName = pane:get_domain_name() }, cwd = cwd and cwd.file_path,
   }
   tab:activate()
@@ -424,12 +435,17 @@ local function show_tab_mover(window, pane, source)
       if not id then return end
       local window_id, index = id:match('^slot:(%d+):(%d+)$')
       window_id, index = tonumber(window_id), tonumber(index)
-      if window_id == gui:window_id() then return gui:perform_action(act.MoveTab(index), active_pane) end
+      if window_id == gui:window_id() then
+        mark_tab_placed(gui:mux_window(), source:tab_id())
+        return gui:perform_action(act.MoveTab(index), active_pane)
+      end
       local refusal = cross_window_move_error(source)
       if refusal then return gui:toast_notification('WezTerm', refusal, nil, 4000) end
-      local moving = source:active_pane()
+      -- Moving a pane creates a fresh tab, which drops an explicit title.
+      local moving, title = source:active_pane(), source:get_title()
       if id == 'new-window' then
         local tab, destination = moving:move_to_new_window(wezterm.mux.get_active_workspace())
+        tab:set_title(title)
         return focus_tab(destination, tab)
       end
       placed_panes[moving:pane_id()] = true
@@ -438,14 +454,22 @@ local function show_tab_mover(window, pane, source)
         placed_panes[moving:pane_id()] = nil
         return gui:toast_notification('WezTerm', 'Moving the tab failed: ' .. stderr, nil, 4000)
       end
-      -- The CLI appends the tab, and MoveTab only acts on the active tab.
-      local destination = wezterm.mux.get_window(window_id)
-      local tabs, destination_gui = destination:tabs(), destination:gui_window()
-      tabs[#tabs]:activate()
+      -- Other tabs may arrive while the CLI runs, so find the moved tab by its pane;
+      -- MoveTab only acts on the active tab.
+      local moved, destination_gui = moving:tab(), wezterm.mux.get_window(window_id):gui_window()
+      moved:set_title(title)
+      moved:activate()
       destination_gui:perform_action(act.MoveTab(index), moving)
       destination_gui:focus()
     end),
   }, pane)
+end
+
+local function move_tab_relative(offset)
+  return wezterm.action_callback(function(window, pane)
+    mark_tab_placed(window:mux_window(), window:active_tab():tab_id())
+    window:perform_action(act.MoveTabRelative(offset), pane)
+  end)
 end
 
 local function show_tab_picker(window, pane)
@@ -472,8 +496,8 @@ config.keys = {
   { key = 'RightArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Right' },
   { key = 'UpArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Up' },
   { key = 'DownArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection 'Down' },
-  { key = 'LeftArrow', mods = 'CMD|OPT|SHIFT', action = act.MoveTabRelative(-1) },
-  { key = 'RightArrow', mods = 'CMD|OPT|SHIFT', action = act.MoveTabRelative(1) },
+  { key = 'LeftArrow', mods = 'CMD|OPT|SHIFT', action = move_tab_relative(-1) },
+  { key = 'RightArrow', mods = 'CMD|OPT|SHIFT', action = move_tab_relative(1) },
   { key = '[', mods = 'CMD', action = act.ActivatePaneDirection 'Prev' },
   { key = ']', mods = 'CMD', action = act.ActivatePaneDirection 'Next' },
   { key = 'UpArrow', mods = 'SHIFT', action = act.ScrollToPrompt(-1) },

@@ -114,6 +114,14 @@ local ok, result = pcall(function()
   cmd_t(window)
   expect(window, 'local1 alpha1 alpha2 alphanew local2 beta1', 'alphanew', 'Cmd+T joins the end of its domain group')
 
+  -- Switching tabs right before Cmd+T, with no status tick in between, must still
+  -- group the new tab with the tab now focused.
+  window = new_window({ 'alpha1', 'local1', 'alpha2' }, 'alpha1')
+  tick(window)
+  window.active = 3
+  cmd_t(window)
+  expect(window, 'alpha1 local1 alpha2 alphanew', 'alphanew', 'Cmd+T groups after the tab focused at spawn time')
+
   window = new_window({ 'alpha1', 'local1', 'alpha2', 'local2', 'alpha3' }, 'local1')
   tick(window)
   window:append('alpha4')

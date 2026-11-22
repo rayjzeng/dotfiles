@@ -39,6 +39,7 @@ local ok, result = pcall(function()
     return { pane_id = function() return id end, get_domain_name = function() return domain end,
       get_title = function() return title end, get_user_vars = function() return {} end,
       get_foreground_process_name = function() return 'zsh' end,
+      tab = function(self) return self.fake_tab end,
       move_to_new_window = function(_, workspace)
         table.insert(new_windows, { pane = id, workspace = workspace })
         local moved = tab(41, '', { pane(id, domain, title) })
@@ -47,8 +48,10 @@ local ok, result = pcall(function()
   end
   function tab(id, title, panes)
     local t = {}
+    for _, p in ipairs(panes) do p.fake_tab = t end
     function t:tab_id() return id end
     function t:get_title() return title end
+    function t:set_title(new_title) title = new_title end
     function t:active_pane() return panes[1] end
     function t:panes() return panes end
     function t:window() return t.fake_window end
@@ -78,6 +81,10 @@ local ok, result = pcall(function()
       elseif action.MoveTab then
         table.insert(w.fake_tabs, action.MoveTab + 1, table.remove(w.fake_tabs, w.active))
         w.active = action.MoveTab + 1
+      elseif action.MoveTabRelative then
+        local target = w.active + action.MoveTabRelative
+        table.insert(w.fake_tabs, target, table.remove(w.fake_tabs, w.active))
+        w.active = target
       end
     end
     function w:window_id() return id end
@@ -122,7 +129,7 @@ local ok, result = pcall(function()
   end
   -- run_child_process yields to the event loop, so status ticks run while the CLI
   -- moves the pane; tick the destination after the pane arrives, before returning.
-  local move_succeeds = true
+  local move_succeeds, arrives_during_move = true, false
   wezterm.run_child_process = function(args)
     table.insert(commands, args)
     if not move_succeeds then return false, '', 'no such window' end
@@ -130,20 +137,24 @@ local ok, result = pcall(function()
     local moved = table.remove(source, index_of_tab(source, 10))
     windows[9]:append(tab(50, '', moved:panes()))
     tick(windows[9])
+    if arrives_during_move then windows[9]:append(tab(70, '', { pane(700, 'local', 'arrived') })) end
     return true, '', ''
   end
 
   local config = dofile(os.getenv('WEZTERM_PICKER_TEST_CONFIG'))
   local keys = {}
   for _, key in ipairs(config.keys) do keys[key.mods .. ':' .. key.key] = key.action end
-  assert(keys['CMD|OPT|SHIFT:LeftArrow'].MoveTabRelative == -1, 'Cmd+Opt+Shift+Left must move the tab left')
-  assert(keys['CMD|OPT|SHIFT:RightArrow'].MoveTabRelative == 1, 'Cmd+Opt+Shift+Right must move the tab right')
+  local move_left = assert(callbacks[keys['CMD|OPT|SHIFT:LeftArrow'].EmitEvent], 'Cmd+Opt+Shift+Left must run a callback')
+  local move_right = assert(callbacks[keys['CMD|OPT|SHIFT:RightArrow'].EmitEvent], 'Cmd+Opt+Shift+Right must run a callback')
   local picker = assert(callbacks[keys['CMD|SHIFT:t'].EmitEvent], 'Cmd+Shift+T must open the tab picker')
 
-  -- Opens the picker on `active_tab` and picks each id in turn from the latest selector.
+  -- Opens the picker on `active_tab` and picks each id in turn from the latest selector;
+  -- `before_pick` changes the reset windows first.
+  local before_pick
   local function choose(active_tab, ...)
     focused, toasts, commands, new_windows, selector = nil, {}, {}, {}, nil
     reset()
+    if before_pick then before_pick() end
     local source = tabs[active_tab]
     source:activate()
     local gui = source:window():gui_window()
@@ -207,6 +218,27 @@ local ok, result = pcall(function()
   choose(10, 'move', nil)
   assert(#commands == 0 and order(5) == '10 11 12', 'cancelling the move must do nothing')
 
+  -- Tabs moved by hand before any status tick saw them must not be regrouped.
+  local function add_unseen_alpha()
+    windows[5]:append(tab(13, '', { pane(130, 'devserver:devvm123', 'fresh') }))
+    windows[5].active = 4
+  end
+  reset()
+  add_unseen_alpha()
+  local gui5 = windows[5]:gui_window()
+  move_left(gui5, tabs[13]:active_pane())
+  move_left(gui5, tabs[13]:active_pane())
+  move_right(gui5, tabs[13]:active_pane())
+  expect_order(5, '10 11 13 12', 13, 'move keys reorder the tab')
+  move_left(gui5, tabs[13]:active_pane())
+  tick(windows[5])
+  expect_order(5, '10 13 11 12', 13, 'grouping must leave a tab moved with the keys in place')
+  before_pick = add_unseen_alpha
+  choose(13, 'move', 'slot:5:0')
+  tick(windows[5])
+  expect_order(5, '13 10 11 12', 13, 'grouping must leave a tab moved in its window in place')
+  before_pick = nil
+
   choose(12, 'move', 'slot:5:0')
   expect_order(5, '12 10 11', 12, 'same-window move to the front')
   choose(10, 'move', 'slot:5:1')
@@ -235,6 +267,17 @@ local ok, result = pcall(function()
   windows[9].active = 5
   tick(windows[9])
   expect_order(9, '20 50 21 60 22', 60, 'grouping still places tabs nobody placed')
+
+  -- The moved tab is found by its pane, not as the last tab, and keeps its title.
+  arrives_during_move = true
+  before_pick = function() tabs[10]:set_title('notes') end
+  choose(10, 'move', 'slot:9:1')
+  expect_order(9, '20 50 21 22 70', 50, 'a tab arriving during the move must not be moved instead')
+  assert(tabs[50]:get_title() == 'notes', 'a cross-window move must keep the tab title')
+  arrives_during_move = false
+  choose(10, 'move', 'new-window')
+  assert(tabs[41]:get_title() == 'notes', 'a new-window move must keep the tab title')
+  before_pick = nil
 
   move_succeeds = false
   choose(10, 'move', 'slot:9:1')
