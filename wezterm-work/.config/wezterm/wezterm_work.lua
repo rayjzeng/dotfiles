@@ -158,13 +158,25 @@ local function focus(window, pane)
   select(0)
 end
 
--- The size server tabs must fit before attaching: the destination's on-screen
+-- A window's size is its largest tab's: the GUI resizes every tab with the window
+-- but never grows a smaller attached tab, so the active tab may be undersized.
+local function window_size(window)
+  local largest
+  for _, tab in ipairs(window:tabs()) do
+    local size = tab:get_size()
+    if not largest or size.cols > largest.cols or size.rows > largest.rows then largest = size end
+  end
+  return largest
+end
+
+-- The size server tabs are fitted to before attaching: the destination's on-screen
 -- size, or the largest open window while a fresh destination has no GUI yet.
 local function attach_size(destination)
   local largest
   for _, gui in ipairs(wezterm.gui.gui_windows()) do
     local ok, size, id = pcall(function()
-      return gui:active_tab():get_size(), gui:mux_window():window_id()
+      local window = gui:mux_window()
+      return window_size(window), window:window_id()
     end)
     if ok then
       if id == destination:window_id() then return size end

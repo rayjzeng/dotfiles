@@ -314,8 +314,26 @@ end)
 
         run('alpha')
         assert session_windows(alpha_content) == {detached}, 'open should focus detached host'
+        # Shrink alpha's server tab so it attaches shorter than the main window. WezTerm
+        # grows a window to a larger attached tab but never grows a smaller one.
+        native_tab = next(row['tab_id'] for row in native_alpha() if row['pane_id'] == native_panes['host-a'])
+        guard.send_resizes(native_socket, [(native_tab, row['pane_id'], max(1, row['size']['rows'] // 2),
+                                            row['size']['cols'], 0, 0, 144)
+                                           for row in native_alpha() if row['tab_id'] == native_tab])
         run('merge', 'alpha')
         wait_for(lambda: all(session_windows(marker) == {main} for marker in (alpha_content, beta_content, split_content)), 'merged process membership')
+        def tab_extents(window):
+            extents = {}
+            for row in listing():
+                if row['window_id'] == window:
+                    cols, rows = extents.get(row['tab_id'], (0, 0))
+                    extents[row['tab_id']] = (max(cols, row['left_col'] + row['size']['cols']),
+                                              max(rows, row['top_row'] + row['size']['rows']))
+            return extents
+        alpha_tab = next(row['tab_id'] for row in listing() if row['window_id'] == main and row['title'] == 'DEVVM_ALPHA')
+        local_tab = next(row['tab_id'] for row in listing() if row['window_id'] == main and row['title'] == 'LOCAL_FIXTURE')
+        assert tab_extents(main)[alpha_tab] == tab_extents(main)[local_tab], \
+            ('merged tab does not fill the window', tab_extents(main))
         run('detach', 'alpha')
         run('detach', 'beta')
         assert any(p['window_id'] == main and p['workspace'] == 'devservers' for p in listing()), 'local anchor lost'
