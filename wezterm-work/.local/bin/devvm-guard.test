@@ -74,10 +74,13 @@ nested = [pane(1, 1, 0, 0, 900, 120), pane(1, 2, 901, 0, 600, 59), pane(1, 3, 90
 sizes = layout_after(nested, guard.fit_plan(nested, 300, 80))
 assert sizes[1][0] + 1 + sizes[2][0] == 300 and sizes[2][0] == sizes[3][0], sizes
 assert sizes[2][1] + 1 + sizes[3][1] == 80 and sizes[1][1] == 80, sizes
-fitting = [pane(2, 4, 0, 0, 200, 50), pane(2, 5, 201, 0, 100, 50)]
-assert guard.fit_plan(fitting + live, 427, 101) and not guard.fit_plan(fitting, 427, 101), \
-    'tabs that already fit must be left alone'
-print('PASS: fit plan shrinks oversized tabs proportionally with aligned split borders')
+matching = [pane(2, 4, 0, 0, 200, 50), pane(2, 5, 201, 0, 100, 50)]
+assert not guard.fit_plan(matching, 301, 50), 'tabs that already match must be left alone'
+# The GUI never grows a smaller attached tab, so fit must grow it to fill the window.
+sizes = layout_after(matching, guard.fit_plan(matching, 427, 99))
+assert sizes[4][0] + 1 + sizes[5][0] == 427 and sizes[4][0] > sizes[5][0], sizes
+assert all(rows == 99 for _, rows in sizes.values()), sizes
+print('PASS: fit plan sizes tabs to the target proportionally with aligned split borders')
 
 
 def guard_cli(*args):
@@ -248,19 +251,19 @@ with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory
             assert {split_tab, zoomed_tab} <= fits, fits
             for tab in (split_tab, zoomed_tab):
                 panes = tab_panes(tab)
-                assert max(p['left_col'] + p['size']['cols'] for p in panes) <= 427, panes
-                assert max(p['top_row'] + p['size']['rows'] for p in panes) <= 20, panes
+                assert max(p['left_col'] + p['size']['cols'] for p in panes) == 427, panes
+                assert max(p['top_row'] + p['size']['rows'] for p in panes) == 20, panes
             left, right = sorted((p for p in tab_panes(split_tab) if p['top_row'] == 0), key=lambda p: p['left_col'])
             assert right['left_col'] == left['size']['cols'] + 1, 'split borders no longer line up'
             assert {p['pane_id'] for tab in (split_tab, zoomed_tab) for p in tab_panes(tab)} == before, \
                 'fitting replaced panes'
             assert [p['pane_id'] for p in tab_panes(zoomed_tab) if p['is_zoomed']] == [zoomed], \
                 'fitting lost the zoom it had to undo'
-            assert guard_cli('fit', 'hostf', state, wezterm, mux_socket, 427, 20) == '', 'fit touched tabs that already fit'
-            print('PASS: fit shrinks oversized and zoomed server tabs in place, then leaves them alone')
+            assert guard_cli('fit', 'hostf', state, wezterm, mux_socket, 427, 20) == '', 'fit touched tabs that already match'
+            print('PASS: fit sizes oversized and zoomed server tabs in place, then leaves them alone')
 
             # Panes too narrow to shrink are clamped to one cell, pushing the scaled
-            # layout past the limit; fit must keep going until the tab really fits.
+            # layout past the target; fit must keep going until the tab really fits.
             narrow = int(mux_cli('spawn', '--window-id', str(first_row['window_id'])).stdout)
             middle = int(mux_cli('split-pane', '--pane-id', str(narrow), '--right').stdout)
             wide = int(mux_cli('split-pane', '--pane-id', str(middle), '--right').stdout)
@@ -270,7 +273,7 @@ with tempfile.TemporaryDirectory(prefix='devvm-guard-', dir='/tmp') as directory
                                             for pane_id, cols in ((narrow, 1), (middle, 1), (wide, 20))])
             assert sorted(p['size']['cols'] for p in tab_panes(uneven_tab)) == [1, 1, 20], tab_panes(uneven_tab)
             guard_cli('fit', 'hostf', state, wezterm, mux_socket, 20, 20)
-            assert max(p['left_col'] + p['size']['cols'] for p in tab_panes(uneven_tab)) <= 20, tab_panes(uneven_tab)
+            assert max(p['left_col'] + p['size']['cols'] for p in tab_panes(uneven_tab)) == 20, tab_panes(uneven_tab)
             print('PASS: fit keeps refitting until tabs with clamped narrow panes fit')
         finally:
             mux.terminate()

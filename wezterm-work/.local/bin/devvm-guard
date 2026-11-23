@@ -9,10 +9,11 @@ relay     Sits between a WezTerm unix domain and its Enkaku forward. WezTerm's
           focus PDUs run away, closing the host's connections.
 watchdog  Watches the GUI log from outside the GUI, because a flooded GUI main
           thread cannot run Lua timers. A runaway error loop trips every relay.
-fit       Shrinks server tabs larger than the attaching window before attach. A
-          new GUI window adopts its tab's stored size, and a 1,496-column tab
-          (one stale pane resize widens the whole tab) overflowed the GPU
-          viewport and aborted the renderer.
+fit       Sizes server tabs to the attaching window before attach. The GUI
+          grows its window to fit a larger tab, and a 1,496-column tab (one
+          stale pane resize widens the whole tab) overflowed the GPU viewport
+          and aborted the renderer. It never grows a smaller tab, which stays
+          undersized in the window until the next window resize.
 """
 import argparse, asyncio, fcntl, json, os, shutil, signal, socket, subprocess, sys, time
 from pathlib import Path
@@ -25,7 +26,7 @@ FOCUS_PDUS_PER_SECOND = 100
 LOG_BYTES_PER_SECOND = 256 * 1024
 TRIP_AFTER_SECONDS = 3
 # Each refit absorbs the previous pass's clamping overshoot; one or two passes suffice
-# unless a tab has more panes than the limit has cells, which can never fit.
+# unless a tab has more panes than the target has cells, which can never fit.
 FIT_PASSES = 4
 
 
@@ -65,16 +66,16 @@ def scaled_span(start, length, total, target):
 
 def fit_plan(panes, cols, rows):
     """Return (tab_id, pane_id, rows, cols, pixel_width, pixel_height, dpi) resizes
-    that shrink every tab larger than cols x rows to fit, as `wezterm cli list` rows."""
+    that make every tab exactly cols x rows, as `wezterm cli list` rows."""
     extents = tab_extents(panes)
     plan = []
     for pane in panes:
         width, height = extents[pane['tab_id']]
-        if width <= cols and height <= rows:
+        if (width, height) == (cols, rows):
             continue
         size = pane['size']
-        new_cols = scaled_span(pane['left_col'], size['cols'], width, min(width, cols))
-        new_rows = scaled_span(pane['top_row'], size['rows'], height, min(height, rows))
+        new_cols = scaled_span(pane['left_col'], size['cols'], width, cols)
+        new_rows = scaled_span(pane['top_row'], size['rows'], height, rows)
         cell_width = size['pixel_width'] // max(size['cols'], 1)
         cell_height = size['pixel_height'] // max(size['rows'], 1)
         plan.append((pane['tab_id'], pane['pane_id'], new_rows, new_cols,
@@ -117,7 +118,7 @@ def tab_extents(panes):
 
 
 def fit_tabs(wezterm, socket_path, cols, rows):
-    """Shrink oversized tabs on the mux at socket_path; return {tab_id: (cols, rows)} before fitting."""
+    """Size every tab on the mux at socket_path to cols x rows; return {tab_id: (cols, rows)} before fitting."""
     env = dict(os.environ, WEZTERM_UNIX_SOCKET=str(socket_path))
     env.pop('WEZTERM_PANE', None)
 
@@ -127,23 +128,23 @@ def fit_tabs(wezterm, socket_path, cols, rows):
 
     panes = json.loads(cli('list', '--format', 'json'))
     extents = tab_extents(panes)
-    oversized = {tab: extents[tab] for tab, *_ in fit_plan(panes, cols, rows)}
+    mismatched = {tab: extents[tab] for tab, *_ in fit_plan(panes, cols, rows)}
     # The server skips rebuilding a zoomed tab's size, so unzoom before resizing.
-    zoomed = [p for p in panes if p['tab_id'] in oversized and p['is_zoomed']]
+    zoomed = [p for p in panes if p['tab_id'] in mismatched and p['is_zoomed']]
     for pane in zoomed:
         cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--unzoom')
     try:
         if zoomed:
             panes = json.loads(cli('list', '--format', 'json'))
         # Panes too narrow to shrink are clamped to one cell, which can push a scaled
-        # layout past the limit, so refit from the server's real geometry until it fits.
+        # layout past the target, so refit from the server's real geometry until it fits.
         for _ in range(FIT_PASSES):
             plan = fit_plan(panes, cols, rows)
             if not plan:
-                return oversized
+                return mismatched
             send_resizes(socket_path, plan)
             panes = json.loads(cli('list', '--format', 'json'))
-        raise RuntimeError(f'tabs still exceed {cols}x{rows} after {FIT_PASSES} fitting passes')
+        raise RuntimeError(f'tabs are still not {cols}x{rows} after {FIT_PASSES} fitting passes')
     finally:
         for pane in zoomed:
             cli('zoom-pane', '--pane-id', str(pane['pane_id']), '--zoom')
@@ -423,8 +424,8 @@ def main():
     if args.command == 'fit':
         for tab, (cols, rows) in sorted(fit_tabs(args.wezterm, args.socket, args.cols, args.rows).items()):
             log_guard_event(args.state_dir, guard='fit', host=args.host, tab=tab,
-                            before=f'{cols}x{rows}', limit=f'{args.cols}x{args.rows}')
-            print(f'fitted tab {tab} from {cols}x{rows} to fit {args.cols}x{args.rows}')
+                            before=f'{cols}x{rows}', after=f'{args.cols}x{args.rows}')
+            print(f'fitted tab {tab} from {cols}x{rows} to {args.cols}x{args.rows}')
         return 0
     listen = relay_paths(args.state_dir, args.host)[0]
     if args.command == 'relay':

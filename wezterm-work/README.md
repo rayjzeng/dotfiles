@@ -260,10 +260,11 @@ survive; reopen the server with `devvm <host>`.
 | Relay | More than 100 focus messages per second for 3 seconds | That server |
 | Watchdog (starts with the GUI) | GUI log grows faster than 256 KB/s for 3 seconds | Every server |
 
-Before a server attaches, any of its tabs larger than the destination window
-is shrunk to fit, keeping pane proportions. A new window adopts its tab's
-stored size, and one 1,496-column tab once overflowed the GPU and crashed the
-GUI. Each fit is logged as `"guard": "fit"`.
+Before a server attaches, each of its tabs is resized to the destination
+window, keeping pane proportions. WezTerm grows a window to fit a larger tab,
+and one 1,496-column tab once overflowed the GPU and crashed the GUI. It never
+grows a smaller tab, which would sit undersized in the window until the next
+resize. Each fit is logged as `"guard": "fit"`.
 
 Trips appear as a macOS notification and as a line in
 `~/.local/state/wezterm-devservers/trips.log`. `relays/<host>.connections` there
