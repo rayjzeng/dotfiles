@@ -163,9 +163,13 @@ local ok, result = pcall(function()
     local choices = selector.choices
     for i = 1, select('#', ...) do
       local id, current = select(i, ...), selector
-      selector = nil
-      callbacks[current.action.EmitEvent](gui, source:active_pane(), id)
-      if selector then choices = selector.choices end
+      if type(id) == 'function' then
+        id()
+      else
+        selector = nil
+        callbacks[current.action.EmitEvent](gui, source:active_pane(), id)
+        if selector then choices = selector.choices end
+      end
     end
     return choices
   end
@@ -198,16 +202,16 @@ local ok, result = pcall(function()
     'move=Move this tab…',
   })
   expect_labels(choose(10, 'move'), {
-    'slot:5:1=Window 1 · after Tab 2 · alpha · remote-shell',
-    'slot:5:2=Window 1 · after Tab 3 · Local · build',
-    'slot:9:0=Window 2 · first',
-    'slot:9:1=Window 2 · after Tab 1 · alpha · remote-a',
-    'slot:9:2=Window 2 · after Tab 2 · Local · vim',
-    'slot:9:3=Window 2 · after Tab 3 · alpha · remote-b',
+    'slot:5:11=Window 1 · after Tab 2 · alpha · remote-shell',
+    'slot:5:12=Window 1 · after Tab 3 · Local · build',
+    'slot:9:first=Window 2 · first',
+    'slot:9:20=Window 2 · after Tab 1 · alpha · remote-a',
+    'slot:9:21=Window 2 · after Tab 2 · Local · vim',
+    'slot:9:22=Window 2 · after Tab 3 · alpha · remote-b',
     'new-window=New window',
   })
   local middle = choose(11, 'move')
-  assert(labels(middle):match('^slot:5:0=Window 1 · first\nslot:5:2=Window 1 · after Tab 3 · Local · build\nslot:9:0='),
+  assert(labels(middle):match('^slot:5:first=Window 1 · first\nslot:5:12=Window 1 · after Tab 3 · Local · build\nslot:9:first='),
     'a middle tab must not be offered its own place:\n' .. labels(middle))
 
   choose(10, 'tab:21')
@@ -234,20 +238,20 @@ local ok, result = pcall(function()
   tick(windows[5])
   expect_order(5, '10 13 11 12', 13, 'grouping must leave a tab moved with the keys in place')
   before_pick = add_unseen_alpha
-  choose(13, 'move', 'slot:5:0')
+  choose(13, 'move', 'slot:5:first')
   tick(windows[5])
   expect_order(5, '13 10 11 12', 13, 'grouping must leave a tab moved in its window in place')
   before_pick = nil
 
-  choose(12, 'move', 'slot:5:0')
+  choose(12, 'move', 'slot:5:first')
   expect_order(5, '12 10 11', 12, 'same-window move to the front')
-  choose(10, 'move', 'slot:5:1')
+  choose(10, 'move', 'slot:5:11')
   expect_order(5, '11 10 12', 10, 'same-window move to the middle')
-  choose(11, 'move', 'slot:5:2')
+  choose(11, 'move', 'slot:5:12')
   expect_order(5, '10 12 11', 11, 'devserver tabs move within their window')
   assert(#commands == 0 and #toasts == 0, 'same-window moves must not use the CLI')
 
-  choose(10, 'move', 'slot:9:3')
+  choose(10, 'move', 'slot:9:22')
   local socket = wezterm.home_dir .. '/.local/share/wezterm/gui-sock-' .. wezterm.procinfo.pid()
   local command = { '/usr/bin/env', 'WEZTERM_UNIX_SOCKET=' .. socket, wezterm.executable_dir .. '/wezterm', '-n',
     'cli', '--no-auto-start', 'move-pane-to-new-tab', '--pane-id', '100', '--window-id', '9' }
@@ -257,7 +261,7 @@ local ok, result = pcall(function()
 
   -- Grouping alone would put the local tab after vim; the user's choice must win,
   -- both against the tick during the move and the ones after it.
-  choose(10, 'move', 'slot:9:1')
+  choose(10, 'move', 'slot:9:20')
   expect_order(9, '20 50 21 22', 50, 'cross-window move to the middle')
   assert(focused == 9, 'the window receiving the tab must be focused')
   tick(windows[9])
@@ -271,7 +275,7 @@ local ok, result = pcall(function()
   -- The moved tab is found by its pane, not as the last tab, and keeps its title.
   arrives_during_move = true
   before_pick = function() tabs[10]:set_title('notes') end
-  choose(10, 'move', 'slot:9:1')
+  choose(10, 'move', 'slot:9:20')
   expect_order(9, '20 50 21 22 70', 50, 'a tab arriving during the move must not be moved instead')
   assert(tabs[50]:get_title() == 'notes', 'a cross-window move must keep the tab title')
   arrives_during_move = false
@@ -279,8 +283,28 @@ local ok, result = pcall(function()
   assert(tabs[41]:get_title() == 'notes', 'a new-window move must keep the tab title')
   before_pick = nil
 
+  -- Tabs that open or close while the selector is open must not shift the position.
+  local function close_tab(id)
+    return function()
+      local w = tabs[id]:window()
+      local at = index_of_tab(w.fake_tabs, id)
+      table.remove(w.fake_tabs, at)
+      if at < w.active then w.active = w.active - 1 end
+    end
+  end
+  choose(10, 'move', close_tab(20), 'slot:9:21')
+  expect_order(9, '21 50 22', 50, 'a destination tab closing while the selector is open')
+  choose(12, 'move', close_tab(10), 'slot:5:11')
+  expect_order(5, '11 12', 12, 'a tab closing in the same window while the selector is open')
+  choose(10, 'move', close_tab(22), 'slot:9:22')
+  assert(#toasts == 1 and toasts[1]:find('no longer exists', 1, true) and #commands == 0 and order(5) == '10 11 12',
+    'a position whose tab closed must be refused before moving: ' .. tostring(toasts[1]))
+  choose(10, 'move', function() windows[9] = nil end, 'slot:9:20')
+  assert(#toasts == 1 and toasts[1]:find('no longer exists', 1, true) and #commands == 0,
+    'a position in a closed window must be refused')
+
   move_succeeds = false
-  choose(10, 'move', 'slot:9:1')
+  choose(10, 'move', 'slot:9:20')
   assert(#toasts == 1 and toasts[1]:find('no such window', 1, true) and focused == nil, 'a failed move must be reported')
   move_succeeds = true
 
@@ -289,7 +313,7 @@ local ok, result = pcall(function()
     'new-window move must keep the workspace')
   assert(windows[40]:active_tab():tab_id() == 41 and focused == 40, 'the tab moved to a new window must be focused')
 
-  choose(11, 'move', 'slot:9:1')
+  choose(11, 'move', 'slot:9:20')
   assert(#toasts == 1 and toasts[1]:find('devvm detach', 1, true) and toasts[1]:find('devvm open', 1, true),
     'devserver tabs must point to devvm: ' .. tostring(toasts[1]))
   assert(#commands == 0 and order(9) == '20 21 22', 'devserver tabs must not move to another window')

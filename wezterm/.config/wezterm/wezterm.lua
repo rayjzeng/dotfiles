@@ -378,9 +378,9 @@ local function tab_picker_choices(windows)
   return choices
 end
 
--- Drop positions as `slot:<window id>:<MoveTab index>`. In the source's own window
--- the tab leaves its place first, so later tabs shift down one, and positions that
--- would leave it where it is are skipped.
+-- Drop positions as `slot:<window id>:first` or `slot:<window id>:<tab id to follow>`.
+-- Tabs can open or close while the selector is open, so positions name a tab rather
+-- than an index. Positions that would leave the source where it is are skipped.
 local function tab_slot_choices(windows, source_id)
   local choices = {}
   for w, window in ipairs(windows) do
@@ -388,14 +388,14 @@ local function tab_slot_choices(windows, source_id)
     for t, tab in ipairs(tabs) do
       if tab:tab_id() == source_id then from = t end
     end
-    local function add(position, label)
+    local function add(position, anchor, label)
       if position == from then return end
-      table.insert(choices, { id = 'slot:' .. window:window_id() .. ':' .. (position - 1),
+      table.insert(choices, { id = 'slot:' .. window:window_id() .. ':' .. anchor,
         label = 'Window ' .. w .. ' · ' .. label })
     end
-    add(1, 'first')
+    add(1, 'first', 'first')
     for t, tab in ipairs(tabs) do
-      add((from and t >= from) and t or t + 1, 'after Tab ' .. t .. ' · ' .. mux_tab_label(tab))
+      add((from and t >= from) and t or t + 1, tab:tab_id(), 'after Tab ' .. t .. ' · ' .. mux_tab_label(tab))
     end
   end
   table.insert(choices, { id = 'new-window', label = 'New window' })
@@ -428,16 +428,35 @@ local function focus_tab(window, tab)
   window:gui_window():focus()
 end
 
+-- The MoveTab index for a drop position in the window's current tabs, counting
+-- without the tab being moved; nil once the tab to follow has closed.
+local function slot_index(mux_window, anchor, moving_id)
+  if anchor == 'first' then return 0 end
+  local index = 0
+  for _, tab in ipairs(mux_window:tabs()) do
+    local id = tab:tab_id()
+    if id ~= moving_id then index = index + 1 end
+    if id == tonumber(anchor) then return index end
+  end
+end
+
 local function show_tab_mover(window, pane, source)
   window:perform_action(act.InputSelector { title = 'Move tab to', fuzzy = true,
     choices = tab_slot_choices(workspace_windows(), source:tab_id()),
     action = wezterm.action_callback(function(gui, active_pane, id)
       if not id then return end
-      local window_id, index = id:match('^slot:(%d+):(%d+)$')
-      window_id, index = tonumber(window_id), tonumber(index)
-      if window_id == gui:window_id() then
-        mark_tab_placed(gui:mux_window(), source:tab_id())
-        return gui:perform_action(act.MoveTab(index), active_pane)
+      local window_id, anchor = id:match('^slot:(%d+):(%w+)$')
+      local destination
+      if window_id then
+        local found, window = pcall(wezterm.mux.get_window, tonumber(window_id))
+        destination = found and window or nil
+        if not destination or not slot_index(destination, anchor, source:tab_id()) then
+          return gui:toast_notification('WezTerm', 'That position no longer exists; open the picker again', nil, 4000)
+        end
+      end
+      if destination and destination:window_id() == gui:window_id() then
+        mark_tab_placed(destination, source:tab_id())
+        return gui:perform_action(act.MoveTab(slot_index(destination, anchor, source:tab_id())), active_pane)
       end
       local refusal = cross_window_move_error(source)
       if refusal then return gui:toast_notification('WezTerm', refusal, nil, 4000) end
@@ -449,17 +468,19 @@ local function show_tab_mover(window, pane, source)
         return focus_tab(destination, tab)
       end
       placed_panes[moving:pane_id()] = true
-      local ok, stderr = move_pane_to_window(moving, window_id)
+      local ok, stderr = move_pane_to_window(moving, destination:window_id())
       if not ok then
         placed_panes[moving:pane_id()] = nil
         return gui:toast_notification('WezTerm', 'Moving the tab failed: ' .. stderr, nil, 4000)
       end
       -- Other tabs may arrive while the CLI runs, so find the moved tab by its pane;
       -- MoveTab only acts on the active tab.
-      local moved, destination_gui = moving:tab(), wezterm.mux.get_window(window_id):gui_window()
+      -- If the tab to follow closed during the move, the tab stays at the end.
+      local moved, destination_gui = moving:tab(), destination:gui_window()
       moved:set_title(title)
       moved:activate()
-      destination_gui:perform_action(act.MoveTab(index), moving)
+      local index = slot_index(destination, anchor, moved:tab_id())
+      if index then destination_gui:perform_action(act.MoveTab(index), moving) end
       destination_gui:focus()
     end),
   }, pane)

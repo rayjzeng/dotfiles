@@ -67,8 +67,8 @@ with tempfile.TemporaryDirectory(prefix='wezterm-tab-moving-', dir='/tmp') as te
         stay = spawn('STAY', '--window-id', str(window_a))
         target = spawn('TARGET', '--new-window', '--workspace', 'personal')
         window_b = row(target)['window_id']
-        for title in ('SCRATCH1', 'SCRATCH2'):
-            spawn(title, '--window-id', str(window_b), '--domain-name', 'scratch')
+        scratch1, _ = (spawn(title, '--window-id', str(window_b), '--domain-name', 'scratch')
+                       for title in ('SCRATCH1', 'SCRATCH2'))
 
         def titles(window):
             return ' '.join(r['title'] for r in listing() if r['window_id'] == window)
@@ -113,7 +113,17 @@ end)
         # The probe runs the real callbacks, so the CLI command and its GUI socket are
         # exactly what Cmd+Shift+T builds. Grouping alone would put the local tab right
         # after TARGET; the chosen slot must win over the status ticks during and after it.
-        active = pick('existing-window', first, 'move', f'slot:{window_b}:2')
+        # A position naming a tab that has since closed is refused before anything moves.
+        gone = spawn('GONE', '--window-id', str(window_b))
+        gone_tab = row(gone)['tab_id']
+        cli('kill-pane', '--pane-id', str(gone))
+        wait_for(lambda: titles(window_b) == 'TARGET SCRATCH1 SCRATCH2', 'closed tab removed')
+        pick('stale-slot', first, 'move', f'slot:{window_b}:{gone_tab}')
+        assert row(first)['window_id'] == window_a, ('a stale position moved the tab', listing())
+        assert titles(window_b) == 'TARGET SCRATCH1 SCRATCH2', ('a stale position changed window B', listing())
+        print('PASS: picker refuses a position whose tab closed while the selector was open')
+
+        active = pick('existing-window', first, 'move', f"slot:{window_b}:{row(scratch1)['tab_id']}")
         moved = row(first)
         assert moved['window_id'] == window_b, ('tab did not move into window B', listing())
         assert titles(window_b) == 'TARGET SCRATCH1 FIRST SCRATCH2', ('tab did not land in the chosen slot', listing())
