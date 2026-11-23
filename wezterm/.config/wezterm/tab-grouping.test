@@ -1,0 +1,166 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+test_dir=$(mktemp -d /tmp/wezterm-tab-grouping-test.XXXXXX)
+trap 'rm -rf "$test_dir"' EXIT
+export DEVVM_CONFIG_DIR="$test_dir"
+export WEZTERM_GROUPING_TEST_CONFIG="$script_dir/wezterm.lua"
+export WEZTERM_GROUPING_TEST_RESULT="$test_dir/result"
+
+cat >"$test_dir/config.lua" <<'LUA'
+local wezterm = require 'wezterm'
+local ok, result = pcall(function()
+  local handlers = {}
+  local original_on = wezterm.on
+  wezterm.on = function(name, callback)
+    handlers[name] = handlers[name] or {}
+    table.insert(handlers[name], callback)
+    return original_on(name, callback)
+  end
+  local original_callback = wezterm.action_callback
+  wezterm.action_callback = function(callback)
+    local action = original_callback(callback)
+    handlers[action.EmitEvent] = { callback }
+    return action
+  end
+  local config = dofile(os.getenv('WEZTERM_GROUPING_TEST_CONFIG'))
+  wezterm.on, wezterm.action_callback = original_on, original_callback
+
+  -- A window whose tabs are named "<domain><n>"; actions mutate it like WezTerm.
+  local next_id, next_window_id = 0, 0
+  local function new_tab(name, domain)
+    next_id = next_id + 1
+    domain = domain or name:match('^%a+')
+    local id = next_id
+    local pane = {
+      pane_id = function() return id end,
+      get_domain_name = function() return domain end,
+      get_current_working_dir = function() return nil end,
+      get_user_vars = function() return {} end,
+      get_foreground_process_name = function() return 'zsh' end,
+    }
+    local tab = { name = name, id = next_id, pane = pane }
+    function tab:tab_id() return self.id end
+    function tab:active_pane() return self.pane end
+    return tab
+  end
+
+  local function new_window(names, active_name)
+    next_window_id = next_window_id + 1
+    local window = { id = next_window_id, tabs = {}, active = 1 }
+    for i, name in ipairs(names) do
+      window.tabs[i] = new_tab(name)
+      if name == active_name then window.active = i end
+    end
+    local mux = {}
+    function mux:window_id() return window.id end
+    function mux:tabs() return window.tabs end
+    function mux:active_tab() return window.tabs[window.active] end
+    function mux:spawn_tab(spec)
+      local domain = spec.domain.DomainName
+      local tab = new_tab(domain .. 'new', domain)
+      table.insert(window.tabs, tab)
+      function tab.activate() window.active = #window.tabs end
+      return tab
+    end
+    function window:mux_window() return mux end
+    function window:get_config_overrides() return {} end
+    function window:set_config_overrides() end
+    function window:perform_action(action)
+      if action.ActivateTab then
+        window.active = action.ActivateTab + 1
+      elseif action.MoveTab then
+        local tab = table.remove(window.tabs, window.active)
+        table.insert(window.tabs, action.MoveTab + 1, tab)
+        window.active = action.MoveTab + 1
+      end
+    end
+    function window:names()
+      local names = {}
+      for i, tab in ipairs(window.tabs) do names[i] = tab.name end
+      return table.concat(names, ' ')
+    end
+    function window:active_name() return window.tabs[window.active].name end
+    function window:append(name)
+      table.insert(window.tabs, new_tab(name))
+      window.active = #window.tabs
+    end
+    return window
+  end
+
+  local function tick(window)
+    for _, handler in ipairs(handlers['update-status']) do
+      handler(window, window.tabs[window.active].pane)
+    end
+  end
+
+  local new_tab_action
+  for _, binding in ipairs(config.keys) do
+    if binding.key == 't' and binding.mods == 'CMD' then new_tab_action = binding.action end
+  end
+  assert(new_tab_action and new_tab_action.EmitEvent, 'Cmd+T must run a callback')
+  local spawn = handlers[new_tab_action.EmitEvent][1]
+  local function cmd_t(window) spawn(window, window.tabs[window.active].pane) end
+
+  local function expect(window, names, active, context)
+    assert(window:names() == names, context .. ': expected [' .. names .. '], got [' .. window:names() .. ']')
+    assert(window:active_name() == active, context .. ': expected ' .. active .. ' focused, got ' .. window:active_name())
+  end
+
+  local window = new_window({ 'local1', 'alpha1', 'alpha2', 'local2', 'beta1' }, 'alpha1')
+  tick(window)
+  expect(window, 'local1 alpha1 alpha2 local2 beta1', 'alpha1', 'first sighting leaves existing tabs alone')
+  cmd_t(window)
+  expect(window, 'local1 alpha1 alpha2 alphanew local2 beta1', 'alphanew', 'Cmd+T joins the end of its domain group')
+
+  -- Switching tabs right before Cmd+T, with no status tick in between, must still
+  -- group the new tab with the tab now focused.
+  window = new_window({ 'alpha1', 'local1', 'alpha2' }, 'alpha1')
+  tick(window)
+  window.active = 3
+  cmd_t(window)
+  expect(window, 'alpha1 local1 alpha2 alphanew', 'alphanew', 'Cmd+T groups after the tab focused at spawn time')
+
+  window = new_window({ 'alpha1', 'local1', 'alpha2', 'local2', 'alpha3' }, 'local1')
+  tick(window)
+  window:append('alpha4')
+  tick(window)
+  expect(window, 'alpha1 local1 alpha2 alpha4 local2 alpha3', 'alpha4',
+    'a split domain grows the first group after the focused tab')
+
+  window = new_window({ 'alpha1', 'alpha2', 'local1' }, 'alpha2')
+  tick(window)
+  window:append('local2')
+  window:append('alpha3')
+  window.active = 2
+  tick(window)
+  expect(window, 'alpha1 alpha2 alpha3 local1 local2', 'alpha2',
+    'several detected tabs group without stealing focus')
+
+  window = new_window({ 'alpha1', 'local1' }, 'local1')
+  tick(window)
+  window:append('alpha2')
+  tick(window)
+  expect(window, 'alpha1 alpha2 local1', 'alpha2', 'groups before the focused tab are used when none follow')
+
+  window = new_window({ 'local1', 'alpha1' }, 'local1')
+  tick(window)
+  window:append('beta1')
+  tick(window)
+  expect(window, 'local1 alpha1 beta1', 'beta1', 'a new domain opens at the end')
+  return config
+end)
+local file = assert(io.open(os.getenv('WEZTERM_GROUPING_TEST_RESULT'), 'w'))
+file:write(ok and 'PASS' or tostring(result))
+file:close()
+return ok and result or {}
+LUA
+
+wezterm --config-file "$test_dir/config.lua" show-keys >/dev/null
+result=$(cat "$WEZTERM_GROUPING_TEST_RESULT")
+if [[ $result != PASS ]]; then
+  printf 'FAIL: %s\n' "$result" >&2
+  exit 1
+fi
+printf 'PASS: new tabs join their domain group after the focused tab\n'

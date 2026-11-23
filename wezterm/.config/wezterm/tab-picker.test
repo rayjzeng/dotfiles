@@ -1,0 +1,338 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(cd "$script_dir/../../.." && pwd)
+test_dir=$(mktemp -d /tmp/wezterm-tab-picker-test.XXXXXX)
+trap 'rm -rf "$test_dir"' EXIT
+export DEVVM_CONFIG_DIR="$test_dir"
+export DEVVM_SOCKET_DIR="$test_dir/sockets"
+export DEVVM_STATE_DIR="$test_dir/state"
+export WEZTERM_PICKER_TEST_CONFIG="$script_dir/wezterm.lua"
+export WEZTERM_PICKER_TEST_RESULT="$test_dir/result"
+# Load the work module so devserver tabs are managed domains, as on a work laptop.
+ln -s "$repo_dir/wezterm-work/.config/wezterm/wezterm_work.lua" "$test_dir/wezterm_work.lua"
+printf 'devvm123.example.test alpha\n' >"$test_dir/devservers"
+
+cat >"$test_dir/config.lua" <<'LUA'
+local wezterm = require 'wezterm'
+local ok, result = pcall(function()
+  -- action_callback registers handlers natively, so capture them by event name (the
+  -- move selector is built at runtime), and capture update-status so status ticks can
+  -- run grouping mid-move.
+  local callbacks, ticks = {}, {}
+  local action_callback, on = wezterm.action_callback, wezterm.on
+  wezterm.action_callback = function(handler)
+    local action = action_callback(handler)
+    callbacks[action.EmitEvent] = handler
+    return action
+  end
+  wezterm.on = function(name, handler)
+    if name == 'update-status' then table.insert(ticks, handler) end
+    return on(name, handler)
+  end
+
+  -- GUI actions mutate the fake windows like WezTerm: MoveTab moves the active tab.
+  local windows, tabs, focused, toasts, commands, new_windows, selector
+  local pane, tab, window
+  function pane(id, domain, title)
+    return { pane_id = function() return id end, get_domain_name = function() return domain end,
+      get_title = function() return title end, get_user_vars = function() return {} end,
+      get_foreground_process_name = function() return 'zsh' end,
+      tab = function(self) return self.fake_tab end,
+      move_to_new_window = function(_, workspace)
+        table.insert(new_windows, { pane = id, workspace = workspace })
+        local moved = tab(41, '', { pane(id, domain, title) })
+        return moved, window(40, workspace, { moved })
+      end }
+  end
+  function tab(id, title, panes)
+    local t = {}
+    for _, p in ipairs(panes) do p.fake_tab = t end
+    function t:tab_id() return id end
+    function t:get_title() return title end
+    function t:set_title(new_title) title = new_title end
+    function t:active_pane() return panes[1] end
+    function t:panes() return panes end
+    function t:window() return t.fake_window end
+    function t:activate()
+      for i, other in ipairs(t.fake_window.fake_tabs) do
+        if other == t then t.fake_window.active = i end
+      end
+    end
+    tabs[id] = t
+    return t
+  end
+  function window(id, workspace, window_tabs)
+    local w = { fake_tabs = window_tabs, active = 1 }
+    local gui = {}
+    function gui:window_id() return id end
+    function gui:mux_window() return w end
+    function gui:active_tab() return w:active_tab() end
+    function gui:focus() focused = id end
+    function gui:get_config_overrides() return {} end
+    function gui:set_config_overrides() end
+    function gui:toast_notification(_, message) table.insert(toasts, message) end
+    function gui:perform_action(action)
+      if action.InputSelector then
+        selector = action.InputSelector
+      elseif action.ActivateTab then
+        w.active = action.ActivateTab + 1
+      elseif action.MoveTab then
+        table.insert(w.fake_tabs, action.MoveTab + 1, table.remove(w.fake_tabs, w.active))
+        w.active = action.MoveTab + 1
+      elseif action.MoveTabRelative then
+        local target = w.active + action.MoveTabRelative
+        table.insert(w.fake_tabs, target, table.remove(w.fake_tabs, w.active))
+        w.active = target
+      end
+    end
+    function w:window_id() return id end
+    function w:get_workspace() return workspace end
+    function w:tabs() return w.fake_tabs end
+    function w:active_tab() return w.fake_tabs[w.active] end
+    function w:gui_window() return gui end
+    function w:append(t)
+      t.fake_window = w
+      table.insert(w.fake_tabs, t)
+    end
+    for _, t in ipairs(window_tabs) do t.fake_window = w end
+    windows[id] = w
+    return w
+  end
+  local function tick(w)
+    for _, handler in ipairs(ticks) do handler(w:gui_window(), w:active_tab():active_pane()) end
+  end
+  local function reset()
+    windows, tabs = {}, {}
+    window(9, 'personal', {
+      tab(20, '', { pane(200, 'devserver:devvm123', 'remote-a') }),
+      tab(21, '', { pane(210, 'local', 'vim') }),
+      tab(22, '', { pane(220, 'devserver:devvm123', 'remote-b') }),
+    })
+    window(7, 'other', { tab(30, '', { pane(300, 'local', 'elsewhere') }) })
+    window(5, 'personal', {
+      tab(10, '', { pane(100, 'local', 'zsh') }),
+      tab(11, '', { pane(110, 'devserver:devvm123', 'remote-shell') }),
+      tab(12, 'build', { pane(120, 'local', 'make'), pane(121, 'local', 'tail') }),
+    })
+    for _, w in pairs(windows) do tick(w) end
+  end
+  wezterm.mux.get_active_workspace = function() return 'personal' end
+  wezterm.mux.all_windows = function() return { windows[9], windows[7], windows[5] } end
+  wezterm.mux.get_tab = function(id) return tabs[id] end
+  wezterm.mux.get_window = function(id) return windows[id] end
+  local function index_of_tab(list, id)
+    for i, t in ipairs(list) do
+      if t:tab_id() == id then return i end
+    end
+  end
+  -- run_child_process yields to the event loop, so status ticks run while the CLI
+  -- moves the pane; tick the destination after the pane arrives, before returning.
+  local move_succeeds, arrives_during_move = true, false
+  wezterm.run_child_process = function(args)
+    table.insert(commands, args)
+    if not move_succeeds then return false, '', 'no such window' end
+    local source = windows[5].fake_tabs
+    local moved = table.remove(source, index_of_tab(source, 10))
+    windows[9]:append(tab(50, '', moved:panes()))
+    tick(windows[9])
+    if arrives_during_move then windows[9]:append(tab(70, '', { pane(700, 'local', 'arrived') })) end
+    return true, '', ''
+  end
+
+  local config = dofile(os.getenv('WEZTERM_PICKER_TEST_CONFIG'))
+  local keys = {}
+  for _, key in ipairs(config.keys) do keys[key.mods .. ':' .. key.key] = key.action end
+  local move_left = assert(callbacks[keys['CMD|OPT|SHIFT:LeftArrow'].EmitEvent], 'Cmd+Opt+Shift+Left must run a callback')
+  local move_right = assert(callbacks[keys['CMD|OPT|SHIFT:RightArrow'].EmitEvent], 'Cmd+Opt+Shift+Right must run a callback')
+  local picker = assert(callbacks[keys['CMD|SHIFT:t'].EmitEvent], 'Cmd+Shift+T must open the tab picker')
+
+  -- Opens the picker on `active_tab` and picks each id in turn from the latest selector;
+  -- `before_pick` changes the reset windows first.
+  local before_pick
+  local function choose(active_tab, ...)
+    focused, toasts, commands, new_windows, selector = nil, {}, {}, {}, nil
+    reset()
+    if before_pick then before_pick() end
+    local source = tabs[active_tab]
+    source:activate()
+    local gui = source:window():gui_window()
+    picker(gui, source:active_pane())
+    assert(selector and selector.fuzzy, 'Cmd+Shift+T must open a fuzzy selector')
+    local choices = selector.choices
+    for i = 1, select('#', ...) do
+      local id, current = select(i, ...), selector
+      if type(id) == 'function' then
+        id()
+      else
+        selector = nil
+        callbacks[current.action.EmitEvent](gui, source:active_pane(), id)
+        if selector then choices = selector.choices end
+      end
+    end
+    return choices
+  end
+  local function labels(choices)
+    local list = {}
+    for _, choice in ipairs(choices) do table.insert(list, choice.id .. '=' .. choice.label) end
+    return table.concat(list, '\n')
+  end
+  local function expect_labels(choices, expected)
+    assert(labels(choices) == table.concat(expected, '\n'), 'unexpected choices:\n' .. labels(choices))
+  end
+  local function order(id)
+    local list = {}
+    for _, t in ipairs(windows[id].fake_tabs) do table.insert(list, t:tab_id()) end
+    return table.concat(list, ' ')
+  end
+  local function expect_order(id, expected, active, context)
+    assert(order(id) == expected, context .. ': expected [' .. expected .. '], got [' .. order(id) .. ']')
+    local now = windows[id]:active_tab():tab_id()
+    assert(now == active, context .. ': expected tab ' .. active .. ' active, got ' .. now)
+  end
+
+  expect_labels(choose(10), {
+    'tab:10=Window 1 · Tab 1 · Local · zsh',
+    'tab:11=Window 1 · Tab 2 · alpha · remote-shell',
+    'tab:12=Window 1 · Tab 3 · Local · build',
+    'tab:20=Window 2 · Tab 1 · alpha · remote-a',
+    'tab:21=Window 2 · Tab 2 · Local · vim',
+    'tab:22=Window 2 · Tab 3 · alpha · remote-b',
+    'move=Move this tab…',
+  })
+  expect_labels(choose(10, 'move'), {
+    'slot:5:11=Window 1 · after Tab 2 · alpha · remote-shell',
+    'slot:5:12=Window 1 · after Tab 3 · Local · build',
+    'slot:9:first=Window 2 · first',
+    'slot:9:20=Window 2 · after Tab 1 · alpha · remote-a',
+    'slot:9:21=Window 2 · after Tab 2 · Local · vim',
+    'slot:9:22=Window 2 · after Tab 3 · alpha · remote-b',
+    'new-window=New window',
+  })
+  local middle = choose(11, 'move')
+  assert(labels(middle):match('^slot:5:first=Window 1 · first\nslot:5:12=Window 1 · after Tab 3 · Local · build\nslot:9:first='),
+    'a middle tab must not be offered its own place:\n' .. labels(middle))
+
+  choose(10, 'tab:21')
+  assert(windows[9]:active_tab():tab_id() == 21 and focused == 9,
+    'choosing a tab in another window must activate it and focus its window')
+  choose(10, nil)
+  assert(#commands == 0 and order(5) == '10 11 12', 'cancelling the picker must do nothing')
+  choose(10, 'move', nil)
+  assert(#commands == 0 and order(5) == '10 11 12', 'cancelling the move must do nothing')
+
+  -- Tabs moved by hand before any status tick saw them must not be regrouped.
+  local function add_unseen_alpha()
+    windows[5]:append(tab(13, '', { pane(130, 'devserver:devvm123', 'fresh') }))
+    windows[5].active = 4
+  end
+  reset()
+  add_unseen_alpha()
+  local gui5 = windows[5]:gui_window()
+  move_left(gui5, tabs[13]:active_pane())
+  move_left(gui5, tabs[13]:active_pane())
+  move_right(gui5, tabs[13]:active_pane())
+  expect_order(5, '10 11 13 12', 13, 'move keys reorder the tab')
+  move_left(gui5, tabs[13]:active_pane())
+  tick(windows[5])
+  expect_order(5, '10 13 11 12', 13, 'grouping must leave a tab moved with the keys in place')
+  before_pick = add_unseen_alpha
+  choose(13, 'move', 'slot:5:first')
+  tick(windows[5])
+  expect_order(5, '13 10 11 12', 13, 'grouping must leave a tab moved in its window in place')
+  before_pick = nil
+
+  choose(12, 'move', 'slot:5:first')
+  expect_order(5, '12 10 11', 12, 'same-window move to the front')
+  choose(10, 'move', 'slot:5:11')
+  expect_order(5, '11 10 12', 10, 'same-window move to the middle')
+  choose(11, 'move', 'slot:5:12')
+  expect_order(5, '10 12 11', 11, 'devserver tabs move within their window')
+  assert(#commands == 0 and #toasts == 0, 'same-window moves must not use the CLI')
+
+  choose(10, 'move', 'slot:9:22')
+  local socket = wezterm.home_dir .. '/.local/share/wezterm/gui-sock-' .. wezterm.procinfo.pid()
+  local command = { '/usr/bin/env', 'WEZTERM_UNIX_SOCKET=' .. socket, wezterm.executable_dir .. '/wezterm', '-n',
+    'cli', '--no-auto-start', 'move-pane-to-new-tab', '--pane-id', '100', '--window-id', '9' }
+  assert(#commands == 1 and table.concat(commands[1], ' ') == table.concat(command, ' '),
+    'move must target this GUI: ' .. table.concat(commands[1] or {}, ' '))
+  expect_order(9, '20 21 22 50', 50, 'cross-window move to the end')
+
+  -- Grouping alone would put the local tab after vim; the user's choice must win,
+  -- both against the tick during the move and the ones after it.
+  choose(10, 'move', 'slot:9:20')
+  expect_order(9, '20 50 21 22', 50, 'cross-window move to the middle')
+  assert(focused == 9, 'the window receiving the tab must be focused')
+  tick(windows[9])
+  tick(windows[9])
+  expect_order(9, '20 50 21 22', 50, 'grouping must leave a tab moved on purpose in place')
+  windows[9]:append(tab(60, '', { pane(600, 'local', 'later') }))
+  windows[9].active = 5
+  tick(windows[9])
+  expect_order(9, '20 50 21 60 22', 60, 'grouping still places tabs nobody placed')
+
+  -- The moved tab is found by its pane, not as the last tab, and keeps its title.
+  arrives_during_move = true
+  before_pick = function() tabs[10]:set_title('notes') end
+  choose(10, 'move', 'slot:9:20')
+  expect_order(9, '20 50 21 22 70', 50, 'a tab arriving during the move must not be moved instead')
+  assert(tabs[50]:get_title() == 'notes', 'a cross-window move must keep the tab title')
+  arrives_during_move = false
+  choose(10, 'move', 'new-window')
+  assert(tabs[41]:get_title() == 'notes', 'a new-window move must keep the tab title')
+  before_pick = nil
+
+  -- Tabs that open or close while the selector is open must not shift the position.
+  local function close_tab(id)
+    return function()
+      local w = tabs[id]:window()
+      local at = index_of_tab(w.fake_tabs, id)
+      table.remove(w.fake_tabs, at)
+      if at < w.active then w.active = w.active - 1 end
+    end
+  end
+  choose(10, 'move', close_tab(20), 'slot:9:21')
+  expect_order(9, '21 50 22', 50, 'a destination tab closing while the selector is open')
+  choose(12, 'move', close_tab(10), 'slot:5:11')
+  expect_order(5, '11 12', 12, 'a tab closing in the same window while the selector is open')
+  choose(10, 'move', close_tab(22), 'slot:9:22')
+  assert(#toasts == 1 and toasts[1]:find('no longer exists', 1, true) and #commands == 0 and order(5) == '10 11 12',
+    'a position whose tab closed must be refused before moving: ' .. tostring(toasts[1]))
+  choose(10, 'move', function() windows[9] = nil end, 'slot:9:20')
+  assert(#toasts == 1 and toasts[1]:find('no longer exists', 1, true) and #commands == 0,
+    'a position in a closed window must be refused')
+
+  move_succeeds = false
+  choose(10, 'move', 'slot:9:20')
+  assert(#toasts == 1 and toasts[1]:find('no such window', 1, true) and focused == nil, 'a failed move must be reported')
+  move_succeeds = true
+
+  choose(10, 'move', 'new-window')
+  assert(#new_windows == 1 and new_windows[1].pane == 100 and new_windows[1].workspace == 'personal',
+    'new-window move must keep the workspace')
+  assert(windows[40]:active_tab():tab_id() == 41 and focused == 40, 'the tab moved to a new window must be focused')
+
+  choose(11, 'move', 'slot:9:20')
+  assert(#toasts == 1 and toasts[1]:find('devvm detach', 1, true) and toasts[1]:find('devvm open', 1, true),
+    'devserver tabs must point to devvm: ' .. tostring(toasts[1]))
+  assert(#commands == 0 and order(9) == '20 21 22', 'devserver tabs must not move to another window')
+
+  choose(12, 'move', 'new-window')
+  assert(#toasts == 1 and toasts[1]:find('Unsplit', 1, true), 'split tabs must ask to unsplit: ' .. tostring(toasts[1]))
+  assert(#new_windows == 0 and #commands == 0, 'split tabs must not move to another window')
+  return config
+end)
+local file = assert(io.open(os.getenv('WEZTERM_PICKER_TEST_RESULT'), 'w'))
+file:write(ok and 'PASS' or tostring(result))
+file:close()
+return ok and result or {}
+LUA
+
+wezterm --config-file "$test_dir/config.lua" show-keys >/dev/null
+result=$(cat "$WEZTERM_PICKER_TEST_RESULT")
+if [[ $result != PASS ]]; then
+  printf 'FAIL: %s\n' "$result" >&2
+  exit 1
+fi
+printf 'PASS: tab picker jumps across windows, moves tabs to any position, keeps them there against grouping, and refuses devserver and split tabs\n'
