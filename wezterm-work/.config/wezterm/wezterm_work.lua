@@ -158,15 +158,16 @@ local function focus(window, pane)
   select(0)
 end
 
--- A window's size is its largest tab's: the GUI resizes every tab with the window
--- but never grows a smaller attached tab, so the active tab may be undersized.
+-- A window spans its tabs' largest width and height: the GUI resizes every tab with
+-- the window but never grows a smaller attached tab, so any one tab may be undersized
+-- in either dimension.
 local function window_size(window)
-  local largest
+  local cols, rows = 0, 0
   for _, tab in ipairs(window:tabs()) do
     local size = tab:get_size()
-    if not largest or size.cols > largest.cols or size.rows > largest.rows then largest = size end
+    cols, rows = math.max(cols, size.cols), math.max(rows, size.rows)
   end
-  return largest
+  return { cols = cols, rows = rows }
 end
 
 -- The size server tabs are fitted to before attaching: the destination's on-screen
