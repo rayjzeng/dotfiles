@@ -1,0 +1,123 @@
+#!/bin/bash
+# Checks the target WezTerm selects when each fixture is Command-clicked.
+# WezTerm has no Lua regex matcher and other engines differ, so only a real click
+# through the shared hyperlink_rules proves which target a fixture opens.
+#   --manual        open an isolated GUI and record one click receipt per fixture
+#   --emit-samples  print the fixtures to compare clicks inside other TUIs
+set -euo pipefail
+
+ids=() samples=() targets=()
+# An empty target means the sample must not be a link.
+fixture() { ids+=("$1"); samples+=("$2"); targets+=("$3"); }
+
+fixture G01 'https://example.com' 'https://example.com'
+fixture G02 'https://example.com/path/to/page?x=1&y=2#frag' 'https://example.com/path/to/page?x=1&y=2#frag'
+fixture G03 'See https://example.com/a.' 'https://example.com/a'
+fixture G04 'First https://example.com/a, then more' 'https://example.com/a'
+fixture G05 '"https://example.com/quoted"' 'https://example.com/quoted'
+fixture G06 "'https://example.com/single'" 'https://example.com/single'
+fixture G07 '`https://example.com/tick`' 'https://example.com/tick'
+fixture G08 '<https://example.com/angle>' 'https://example.com/angle'
+fixture G09 '[https://example.com/bracket]' 'https://example.com/bracket'
+fixture G10 '(https://example.com/paren)' 'https://example.com/paren'
+fixture G11 '[label](https://example.com/md)' 'https://example.com/md'
+fixture G12 'https://example.com/?empty=' 'https://example.com/?empty='
+fixture G12b 'https://example.com/?empty=, then prose' 'https://example.com/?empty='
+fixture G12c '"https://example.com/?empty="' 'https://example.com/?empty='
+fixture G13 'https://example.com/path_(part)' 'https://example.com/path_(part)'
+fixture G13b '(https://example.com/path_(part))' 'https://example.com/path_(part)'
+fixture G14 'www.example.com' 'https://www.example.com'
+fixture G14b 'Visit www.example.com.' 'https://www.example.com'
+fixture G14n 'xwww.example.com' ''
+fixture G15 'http://localhost:8080/' 'http://localhost:8080/'
+fixture G15b 'http://localhost:3000/api?q=1' 'http://localhost:3000/api?q=1'
+fixture G16 'http://127.0.0.1:8080/' 'http://127.0.0.1:8080/'
+fixture G16b 'http://192.168.1.10:9000/x?y=z' 'http://192.168.1.10:9000/x?y=z'
+
+# Writes expectations as "[scheme] rest" so the expectation itself is not a link.
+unlinked() { [[ -n $1 ]] && printf '[%s] %s' "${1%%://*}" "${1#*://}" || printf 'not a link'; }
+
+emit_samples() {
+  local i
+  for i in "${!ids[@]}"; do
+    printf '%-5s %s\n      \e[2mexpect: %s\e[0m\n' "${ids[i]}" "${samples[i]}" "$(unlinked "${targets[i]}")"
+  done
+}
+
+# Runs inside the test GUI: shows one fixture at a time and records what the click selected.
+drive() {
+  local dir=$1 i actual
+  for i in "${!ids[@]}"; do
+    rm -f "$dir/receipt"
+    printf '\e[2J\e[H%s  (%d of %d)\n\n%s\n\n' "${ids[i]}" $((i + 1)) ${#ids[@]} "${samples[i]}"
+    printf '\e[2mCommand-click the sample. Press Enter if it is not a link.\e[0m\n'
+    actual=
+    while :; do
+      if [[ -f $dir/receipt ]]; then actual=$(cat "$dir/receipt"); break; fi
+      if read -r -t 1 _; then break; fi
+    done
+    printf '%s\t%s\n' "${ids[i]}" "$actual" >>"$dir/results"
+  done
+  touch "$dir/done"
+}
+
+manual() {
+  local script dir gui_pid
+  script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+  dir=$(mktemp -d /tmp/wezterm-hyperlinks-test.XXXXXX)
+  # Expand now: the EXIT trap runs after this function's locals are gone.
+  trap "rm -rf '$dir'" EXIT
+  # An empty DEVVM_CONFIG_DIR keeps the work module and its Meta rules out.
+  mkdir "$dir/config"
+  cat >"$dir/gui.lua" <<LUA
+local wezterm = require 'wezterm'
+local config = dofile('${script%/*}/wezterm.lua')
+-- Record the selected target instead of launching a browser.
+wezterm.on('open-uri', function(_, _, uri)
+  local path = '$dir/receipt'
+  local file = assert(io.open(path .. '.tmp', 'w'))
+  file:write(uri)
+  file:close()
+  os.rename(path .. '.tmp', path)
+  return false
+end)
+config.default_prog = { '/bin/bash', '$script', '--drive', '$dir' }
+return config
+LUA
+
+  DEVVM_CONFIG_DIR="$dir/config" /Applications/WezTerm.app/Contents/MacOS/wezterm-gui \
+    --config-file "$dir/gui.lua" start --always-new-process --class "hyperlinks-test-$$" \
+    >"$dir/gui.log" 2>&1 &
+  gui_pid=$!
+  while kill -0 "$gui_pid" 2>/dev/null && [[ ! -f $dir/done ]]; do sleep 1; done
+  kill "$gui_pid" 2>/dev/null || true
+  wait "$gui_pid" 2>/dev/null || true
+  if [[ ! -f $dir/done ]]; then
+    printf 'FAIL: the test window closed before every fixture had a receipt\n' >&2
+    tail -n 20 "$dir/gui.log" >&2
+    exit 1
+  fi
+
+  local i=0 id actual failures=0
+  while IFS=$'\t' read -r id actual; do
+    if [[ $actual == "${targets[i]}" ]]; then
+      printf 'PASS %-5s %s\n' "$id" "$(unlinked "$actual")"
+    else
+      printf 'FAIL %-5s want %s, got %s\n' "$id" "$(unlinked "${targets[i]}")" "$(unlinked "$actual")"
+      failures=$((failures + 1))
+    fi
+    i=$((i + 1))
+  done <"$dir/results"
+  if ((failures)); then
+    printf 'FAIL: %d of %d fixtures selected the wrong target\n' "$failures" "${#ids[@]}" >&2
+    exit 1
+  fi
+  printf 'PASS: every fixture selected its expected target\n'
+}
+
+case ${1:-} in
+  --manual) manual ;;
+  --emit-samples) emit_samples ;;
+  --drive) drive "$2" ;;
+  *) printf 'usage: %s --manual | --emit-samples\n' "$0" >&2; exit 2 ;;
+esac
