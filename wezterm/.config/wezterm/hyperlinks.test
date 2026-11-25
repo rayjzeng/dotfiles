@@ -37,6 +37,11 @@ fixture G15 'http://localhost:8080/' 'http://localhost:8080/'
 fixture G15b 'http://localhost:3000/api?q=1' 'http://localhost:3000/api?q=1'
 fixture G16 'http://127.0.0.1:8080/' 'http://127.0.0.1:8080/'
 fixture G16b 'http://192.168.1.10:9000/x?y=z' 'http://192.168.1.10:9000/x?y=z'
+fixture G17 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=fbcode/foo/bar.py&lines[0]=12' 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=fbcode/foo/bar.py&lines[0]=12' 'Click bar.py, after the first [0].'
+fixture G17b '[https://example.com/a[0]]' 'https://example.com/a[0]'
+fixture G17c '[docs](https://example.com/?a[]=1)' 'https://example.com/?a[]=1'
+# A trailing ? usually ends the sentence, not the URL.
+fixture G18 'Is it https://example.com/?' 'https://example.com/'
 
 fixture S01 "${esc}[1;34mhttps://example.com/styled${esc}[0m" 'https://example.com/styled'
 fixture S02 "go to ${esc}[4mhttps://example.com/?empty=${esc}[0m now" 'https://example.com/?empty='
@@ -94,8 +99,9 @@ fixture O04 "${esc}]8;;https://example.com/?q=a%20b&r=(1)${bel}encoded${esc}]8;;
 fixture O05 "${esc}]8;;https://example.com/not-a-diff${bel}D12345678${esc}]8;;${bel}" 'https://example.com/not-a-diff'
 fixture O06 "${esc}]8;;https://example.com/${bel}T274221982${esc}]8;;${bel}" 'https://example.com/'
 
-# Writes expectations as "[scheme] rest" so the expectation itself is not a link.
-unlinked() { [[ -n $1 ]] && printf '[%s] %s' "${1%%://*}" "${1#*://}" || printf 'not a link'; }
+# Writes expectations as "[scheme]://rest": no scheme rule matches "]://", and the slash before
+# a www host blocks the bare-www rule, so the expectation itself is not a link.
+unlinked() { [[ -n $1 ]] && printf '[%s]://%s' "${1%%://*}" "${1#*://}" || printf 'not a link'; }
 
 patterns=('*')
 selected() {

@@ -31,13 +31,13 @@ config.window_frame = {
 }
 config.enable_scroll_bar = true
 
--- Quotes, brackets and unbalanced parentheses around a URL belong to the prose or
--- markup, and so does trailing sentence punctuation; a trailing = or balanced ()
--- belongs to the URL.
+-- Quotes and unbalanced brackets or parentheses around a URL belong to the prose or
+-- markup, and so does trailing sentence punctuation; a trailing = and balanced ()
+-- or [] (as in paths[0]=) belong to the URL.
 local url_char = '[^\\s"\'`<>()\\[\\]{}]'
 local url_end = '[^\\s"\'`<>()\\[\\]{}.,;:!?]'
-local url_parens = '\\(' .. url_char .. '*\\)'
-local url_rest = '(?:' .. url_char .. '|' .. url_parens .. ')*(?:' .. url_end .. '|' .. url_parens .. ')'
+local url_group = '\\(' .. url_char .. '*\\)|\\[' .. url_char .. '*\\]'
+local url_rest = '(?:' .. url_char .. '|' .. url_group .. ')*(?:' .. url_end .. '|' .. url_group .. ')'
 config.hyperlink_rules = {
   -- No TLD requirement, so localhost and IP hosts match.
   { regex = '\\b\\w+://' .. url_rest, format = '$0' },
