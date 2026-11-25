@@ -338,12 +338,16 @@ function work.apply_to_config(config)
     end
   end
   local home = wezterm.home_dir
+  local source_link = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]='
+  -- WezTerm matches whole rows, trailing blank cells included, and links the whole match unless
+  -- highlight names a group; paths stop at whitespace and colons so neither the padding, a
+  -- line prefix nor a trailing compiler message joins the link.
   local rules = {
     { regex = '\\b([tTdDpP]\\d+)\\b', format = 'https://fburl.com/b/$1' },
-    { regex = '^>>> Lint for (.*):$', format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$1&editor=vscode-insiders' },
-    { regex = home .. '/fbsource/(.*):(\\d+):\\d+', format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$1&lines[0]=$2&editor=vscode-insiders' },
-    { regex = '--> (fbcode/.*):(\\d+):\\d+', format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$1&lines[0]=$2&editor=vscode-insiders' },
-    { regex = '^(---|\\+\\+\\+) [ab]/(fbcode/.*)', format = 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=$2&editor=vscode-insiders' },
+    { regex = '^>>> Lint for (\\S+):\\s*$', format = source_link .. '$1&editor=vscode-insiders', highlight = 1 },
+    { regex = home .. '/fbsource/([^\\s:]+):(\\d+):\\d+', format = source_link .. '$1&lines[0]=$2&editor=vscode-insiders' },
+    { regex = '--> ((fbcode/[^\\s:]+):(\\d+):\\d+)', format = source_link .. '$2&lines[0]=$3&editor=vscode-insiders', highlight = 1 },
+    { regex = '^(?:---|\\+\\+\\+) [ab]/(fbcode/\\S+)', format = source_link .. '$1&editor=vscode-insiders', highlight = 1 },
   }
   for _, rule in ipairs(rules) do table.insert(config.hyperlink_rules, rule) end
   table.insert(config.keys, { key = 'o', mods = 'CMD|SHIFT', action = wezterm.action_callback(function(window, pane)

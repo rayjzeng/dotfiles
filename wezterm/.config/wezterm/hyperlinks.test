@@ -72,6 +72,20 @@ fixture M12a 'p2510033448 t274221982 d123456789' 'https://fburl.com/b/p251003344
 fixture M12b 'p2510033448 t274221982 d123456789' 'https://fburl.com/b/t274221982' 'Click t274221982.'
 fixture M12c 'p2510033448 t274221982 d123456789' 'https://fburl.com/b/d123456789' 'Click d123456789.'
 
+source_link='https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]='
+fixture R01 '>>> Lint for fbcode/foo/bar.py:' "${source_link}fbcode/foo/bar.py&editor=vscode-insiders" 'Click the path.'
+fixture R02 "$HOME/fbsource/fbcode/foo/bar.py:12:3" "${source_link}fbcode/foo/bar.py&lines[0]=12&editor=vscode-insiders"
+fixture R03 '--> fbcode/foo/bar.rs:12:3' "${source_link}fbcode/foo/bar.rs&lines[0]=12&editor=vscode-insiders" 'Click the path.'
+fixture R04 '--- a/fbcode/foo/bar.py' "${source_link}fbcode/foo/bar.py&editor=vscode-insiders" 'Click the path.'
+fixture R05 '+++ b/fbcode/foo/bar.py' "${source_link}fbcode/foo/bar.py&editor=vscode-insiders" 'Click the path.'
+# Only the reference itself is a link: not its prefix, the row padding, or a message after it.
+fixture R01n '>>> Lint for fbcode/foo/bar.py:' '' 'Click >>> at the start, not the underlined path.'
+fixture R02m "$HOME/fbsource/fbcode/foo/bar.py:12:3: error: expected 1:2:3" "${source_link}fbcode/foo/bar.py&lines[0]=12&editor=vscode-insiders" 'Click the path.'
+fixture R02n "$HOME/fbsource/fbcode/foo/bar.py:12:3: error: expected 1:2:3" '' 'Click the word error, not the underlined path.'
+fixture R03n '--> fbcode/foo/bar.rs:12:3' '' 'Click --> at the start, not the underlined path.'
+fixture R04n '--- a/fbcode/foo/bar.py' '' 'Click --- at the start, not the underlined path.'
+fixture R04t '--- a/fbcode/foo/bar.py' '' 'Click the blank space right of the path, not the path itself.'
+
 # Explicit OSC 8 targets must win over any rule matching their label.
 fixture O01 "${esc}]8;;https://example.com/osc-bel${bel}click me${esc}]8;;${bel}" 'https://example.com/osc-bel'
 fixture O02 "${esc}]8;;https://example.com/osc-st${esc}\\click me${esc}]8;;${esc}\\" 'https://example.com/osc-st'
