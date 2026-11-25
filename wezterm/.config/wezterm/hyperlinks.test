@@ -94,10 +94,10 @@ fixture R04t '--- a/fbcode/foo/bar.py' '' 'Click the blank space right of the pa
 # Explicit OSC 8 targets must win over any rule matching their label.
 fixture O01 "${esc}]8;;https://example.com/osc-bel${bel}click me${esc}]8;;${bel}" 'https://example.com/osc-bel'
 fixture O02 "${esc}]8;;https://example.com/osc-st${esc}\\click me${esc}]8;;${esc}\\" 'https://example.com/osc-st'
-fixture O03 "${esc}]8;;https://example.com/real${bel}https://example.com/label${esc}]8;;${bel}" 'https://example.com/real'
+fixture O03 "${esc}]8;;https://example.com/real${bel}https://example.com/label${esc}]8;;${bel}" 'https://example.com/real' 'Click the label; it is an OSC 8 link to a different URL.'
 fixture O04 "${esc}]8;;https://example.com/?q=a%20b&r=(1)${bel}encoded${esc}]8;;${bel}" 'https://example.com/?q=a%20b&r=(1)'
-fixture O05 "${esc}]8;;https://example.com/not-a-diff${bel}D12345678${esc}]8;;${bel}" 'https://example.com/not-a-diff'
-fixture O06 "${esc}]8;;https://example.com/${bel}T274221982${esc}]8;;${bel}" 'https://example.com/'
+fixture O05 "${esc}]8;;https://example.com/not-a-diff${bel}D12345678${esc}]8;;${bel}" 'https://example.com/not-a-diff' 'Click the label D12345678; it is an OSC 8 link to a URL.'
+fixture O06 "${esc}]8;;https://example.com/${bel}T274221982${esc}]8;;${bel}" 'https://example.com/' 'Click the label T274221982; it is an OSC 8 link to a URL.'
 
 # Writes expectations as "[scheme]://rest": no scheme rule matches "]://", and the slash before
 # a www host blocks the bare-www rule, so the expectation itself is not a link.
@@ -113,10 +113,26 @@ selected() {
   return 1
 }
 
+# Prints each distinct sample once, then every fixture that clicks it, so click-position
+# variants of one sample read as one sample.
 emit_samples() {
-  local i
+  local i j label variant
   for i in "${!ids[@]}"; do
-    printf '%-5s %s\n      \e[2mexpect (%s): %s\e[0m\n' "${ids[i]}" "${samples[i]}" "${profiles[i]}" "$(unlinked "${targets[i]}")"
+    for ((j = 0; j < i; j++)); do
+      if [[ ${samples[j]} == "${samples[i]}" ]]; then continue 2; fi
+    done
+    label=
+    for j in "${!ids[@]}"; do
+      if [[ ${samples[j]} == "${samples[i]}" ]]; then label+="${label:+/}${ids[j]}"; fi
+    done
+    printf '%-5s %s\n' "$label" "${samples[i]}"
+    for j in "${!ids[@]}"; do
+      if [[ ${samples[j]} != "${samples[i]}" ]]; then continue; fi
+      variant=
+      if [[ $label == */* ]]; then variant="${ids[j]}: "; fi
+      if [[ -n ${hints[j]} ]]; then variant+="${hints[j]} "; fi
+      printf '      \e[2m%sexpect (%s): %s\e[0m\n' "$variant" "${profiles[j]}" "$(unlinked "${targets[j]}")"
+    done
   done
 }
 
