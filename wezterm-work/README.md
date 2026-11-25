@@ -135,12 +135,17 @@ operations. Detaching a domain can remove all of its attached tabs from the GUI.
 | `Shift+Enter` | Send a newline to the terminal application |
 
 Command-click opens URLs with any scheme, including localhost and IP hosts, and
-opens bare `www.` addresses over HTTPS. Surrounding quotes, brackets, unbalanced
-parentheses and trailing sentence punctuation stay out of the link; a trailing `=`
-and balanced parentheses stay in. A URL wrapped by the window width remains one
-link at any width. A URL broken by a real newline is two lines of text, so only
-the first line opens; that happens when a program prints a long URL with its own
-line breaks. Explicit OSC 8 links keep their own target.
+opens bare `www.` addresses over HTTPS. Surrounding quotes, unbalanced brackets or
+parentheses and trailing sentence punctuation (including `?`) stay out of the
+link; a trailing `=` and balanced `()` or `[]`, as in `paths[0]=`, stay in.
+Explicit OSC 8 links keep their own target.
+
+A URL wrapped by the window width opens in full from any of its rows, although
+WezTerm's hover underline may cover only part of it, and it underlines every
+other visible copy of the same URL too. A URL broken by a real newline is two
+lines of text, so only the first line opens. TUIs that wrap text themselves
+cause this: Codex breaks a long URL after its `?`, and Claude Code breaks it at
+the window edge.
 
 The work package also recognizes Meta task/diff/paste IDs and supported fbsource
 path/line references as links. An ID inside a full Meta URL opens the full URL.
