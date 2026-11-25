@@ -1,0 +1,262 @@
+#!/bin/bash
+# Checks the target WezTerm selects when each fixture is Command-clicked.
+# WezTerm has no Lua regex matcher and other engines differ, so only a real click
+# through the configured hyperlink_rules proves which target a fixture opens.
+#   --manual [GLOB...]  open an isolated GUI per profile and record one click
+#                       receipt per fixture whose ID matches a GLOB (default: all)
+#   --emit-samples      print the fixtures to compare clicks inside other TUIs
+set -euo pipefail
+
+esc=$'\e' bel=$'\a'
+ids=() samples=() targets=() hints=() profiles=() widths=()
+# Fixtures take the profile and terminal width in effect when they are declared.
+# An empty target means the sample must not be a link.
+profile=personal width=
+fixture() { ids+=("$1"); samples+=("$2"); targets+=("$3"); hints+=("${4:-}"); profiles+=("$profile"); widths+=("$width"); }
+
+fixture G01 'https://example.com' 'https://example.com'
+fixture G02 'https://example.com/path/to/page?x=1&y=2#frag' 'https://example.com/path/to/page?x=1&y=2#frag'
+fixture G03 'See https://example.com/a.' 'https://example.com/a'
+fixture G04 'First https://example.com/a, then more' 'https://example.com/a'
+fixture G05 '"https://example.com/quoted"' 'https://example.com/quoted'
+fixture G06 "'https://example.com/single'" 'https://example.com/single'
+fixture G07 '`https://example.com/tick`' 'https://example.com/tick'
+fixture G08 '<https://example.com/angle>' 'https://example.com/angle'
+fixture G09 '[https://example.com/bracket]' 'https://example.com/bracket'
+fixture G10 '(https://example.com/paren)' 'https://example.com/paren'
+fixture G11 '[label](https://example.com/md)' 'https://example.com/md'
+fixture G12 'https://example.com/?empty=' 'https://example.com/?empty='
+fixture G12b 'https://example.com/?empty=, then prose' 'https://example.com/?empty='
+fixture G12c '"https://example.com/?empty="' 'https://example.com/?empty='
+fixture G13 'https://example.com/path_(part)' 'https://example.com/path_(part)'
+fixture G13b '(https://example.com/path_(part))' 'https://example.com/path_(part)'
+fixture G14 'www.example.com' 'https://www.example.com'
+fixture G14b 'Visit www.example.com.' 'https://www.example.com'
+fixture G14n 'xwww.example.com' ''
+fixture G15 'http://localhost:8080/' 'http://localhost:8080/'
+fixture G15b 'http://localhost:3000/api?q=1' 'http://localhost:3000/api?q=1'
+fixture G16 'http://127.0.0.1:8080/' 'http://127.0.0.1:8080/'
+fixture G16b 'http://192.168.1.10:9000/x?y=z' 'http://192.168.1.10:9000/x?y=z'
+fixture G17 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=fbcode/foo/bar.py&lines[0]=12' 'https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]=fbcode/foo/bar.py&lines[0]=12' 'Click bar.py, after the first [0].'
+fixture G17b '[https://example.com/a[0]]' 'https://example.com/a[0]'
+fixture G17c '[docs](https://example.com/?a[]=1)' 'https://example.com/?a[]=1'
+# A trailing ? usually ends the sentence, not the URL.
+fixture G18 'Is it https://example.com/?' 'https://example.com/'
+
+fixture S01 "${esc}[1;34mhttps://example.com/styled${esc}[0m" 'https://example.com/styled'
+fixture S02 "go to ${esc}[4mhttps://example.com/?empty=${esc}[0m now" 'https://example.com/?empty='
+
+# W01 is one URL with no newline, so only the terminal width wraps it; W02 has a real newline.
+w01="https://example.com/?probe=$(printf '0%.0s' $(seq 1 240))&tail=END"
+w02=$'https://example.com/\n    continued-by-an-actual-newline'
+width=80
+fixture W01a "$w01" "$w01" 'Click near the start of the URL.'
+fixture W01b "$w01" "$w01" 'Click END at the end of the URL.'
+fixture W02a "$w02" 'https://example.com/' 'Click the first line.'
+fixture W02b "$w02" '' 'Click the second line.'
+width=160
+fixture W01c "$w01" "$w01" 'Click near the start of the URL.'
+fixture W01d "$w01" "$w01" 'Click END at the end of the URL.'
+
+profile=work width=
+fixture M01 'P2510033448' 'https://fburl.com/b/P2510033448'
+fixture M02 'T274221982' 'https://fburl.com/b/T274221982'
+fixture M03 'D123456789' 'https://fburl.com/b/D123456789'
+fixture M04a '(P2510033448), [T274221982], `D123456789`' 'https://fburl.com/b/P2510033448' 'Click P2510033448.'
+fixture M04b '(P2510033448), [T274221982], `D123456789`' 'https://fburl.com/b/T274221982' 'Click T274221982.'
+fixture M04c '(P2510033448), [T274221982], `D123456789`' 'https://fburl.com/b/D123456789' 'Click D123456789.'
+# Clicking the embedded ID is where a bare-ID rule could steal a full URL.
+fixture M05 'https://fburl.com/b/P2510033448' 'https://fburl.com/b/P2510033448' 'Click the ID inside the URL.'
+fixture M06 'https://www.internalfb.com/intern/paste/P2510033448/' 'https://www.internalfb.com/intern/paste/P2510033448/' 'Click the ID inside the URL.'
+fixture M07 'https://www.internalfb.com/phabricator/paste/view/P2510033448' 'https://www.internalfb.com/phabricator/paste/view/P2510033448' 'Click the ID inside the URL.'
+fixture M08 'https://fburl.com/b/T274221982' 'https://fburl.com/b/T274221982' 'Click the ID inside the URL.'
+fixture M09 'https://www.internalfb.com/intern/tasks/?t=274221982' 'https://www.internalfb.com/intern/tasks/?t=274221982' 'Click t=274221982.'
+fixture M10 'https://fburl.com/b/D123456789' 'https://fburl.com/b/D123456789' 'Click the ID inside the URL.'
+fixture M11 'https://www.internalfb.com/phabricator/D123456789' 'https://www.internalfb.com/phabricator/D123456789' 'Click the ID inside the URL.'
+fixture M12a 'p2510033448 t274221982 d123456789' 'https://fburl.com/b/p2510033448' 'Click p2510033448.'
+fixture M12b 'p2510033448 t274221982 d123456789' 'https://fburl.com/b/t274221982' 'Click t274221982.'
+fixture M12c 'p2510033448 t274221982 d123456789' 'https://fburl.com/b/d123456789' 'Click d123456789.'
+
+source_link='https://www.internalfb.com/intern/nuclide/open/arc/?project=fbsource&paths[0]='
+fixture R01 '>>> Lint for fbcode/foo/bar.py:' "${source_link}fbcode/foo/bar.py&editor=vscode-insiders" 'Click the path.'
+fixture R02 "$HOME/fbsource/fbcode/foo/bar.py:12:3" "${source_link}fbcode/foo/bar.py&lines[0]=12&editor=vscode-insiders"
+fixture R03 '--> fbcode/foo/bar.rs:12:3' "${source_link}fbcode/foo/bar.rs&lines[0]=12&editor=vscode-insiders" 'Click the path.'
+fixture R04 '--- a/fbcode/foo/bar.py' "${source_link}fbcode/foo/bar.py&editor=vscode-insiders" 'Click the path.'
+fixture R05 '+++ b/fbcode/foo/bar.py' "${source_link}fbcode/foo/bar.py&editor=vscode-insiders" 'Click the path.'
+# Only the reference itself is a link: not its prefix, the row padding, or a message after it.
+fixture R01n '>>> Lint for fbcode/foo/bar.py:' '' 'Click >>> at the start, not the underlined path.'
+fixture R02m "$HOME/fbsource/fbcode/foo/bar.py:12:3: error: expected 1:2:3" "${source_link}fbcode/foo/bar.py&lines[0]=12&editor=vscode-insiders" 'Click the path.'
+fixture R02n "$HOME/fbsource/fbcode/foo/bar.py:12:3: error: expected 1:2:3" '' 'Click the word error, not the underlined path.'
+fixture R03n '--> fbcode/foo/bar.rs:12:3' '' 'Click --> at the start, not the underlined path.'
+fixture R04n '--- a/fbcode/foo/bar.py' '' 'Click --- at the start, not the underlined path.'
+fixture R04t '--- a/fbcode/foo/bar.py' '' 'Click the blank space right of the path, not the path itself.'
+
+# Explicit OSC 8 targets must win over any rule matching their label.
+fixture O01 "${esc}]8;;https://example.com/osc-bel${bel}click me${esc}]8;;${bel}" 'https://example.com/osc-bel'
+fixture O02 "${esc}]8;;https://example.com/osc-st${esc}\\click me${esc}]8;;${esc}\\" 'https://example.com/osc-st'
+fixture O03 "${esc}]8;;https://example.com/real${bel}https://example.com/label${esc}]8;;${bel}" 'https://example.com/real' 'Click the label; it is an OSC 8 link to a different URL.'
+fixture O04 "${esc}]8;;https://example.com/?q=a%20b&r=(1)${bel}encoded${esc}]8;;${bel}" 'https://example.com/?q=a%20b&r=(1)'
+fixture O05 "${esc}]8;;https://example.com/not-a-diff${bel}D12345678${esc}]8;;${bel}" 'https://example.com/not-a-diff' 'Click the label D12345678; it is an OSC 8 link to a URL.'
+fixture O06 "${esc}]8;;https://example.com/${bel}T274221982${esc}]8;;${bel}" 'https://example.com/' 'Click the label T274221982; it is an OSC 8 link to a URL.'
+
+# Writes expectations as "[scheme]://rest": no scheme rule matches "]://", and the slash before
+# a www host blocks the bare-www rule, so the expectation itself is not a link.
+unlinked() { [[ -n $1 ]] && printf '[%s]://%s' "${1%%://*}" "${1#*://}" || printf 'not a link'; }
+
+patterns=('*')
+selected() {
+  local pattern
+  for pattern in "${patterns[@]}"; do
+    # shellcheck disable=SC2053 # the pattern is a glob on purpose
+    [[ $1 == $pattern ]] && return 0
+  done
+  return 1
+}
+
+# Prints each distinct sample once, then every fixture that clicks it, so click-position
+# variants of one sample read as one sample.
+emit_samples() {
+  local i j label variant
+  for i in "${!ids[@]}"; do
+    for ((j = 0; j < i; j++)); do
+      if [[ ${samples[j]} == "${samples[i]}" ]]; then continue 2; fi
+    done
+    label=
+    for j in "${!ids[@]}"; do
+      if [[ ${samples[j]} == "${samples[i]}" ]]; then label+="${label:+/}${ids[j]}"; fi
+    done
+    printf '%-5s %s\n' "$label" "${samples[i]}"
+    for j in "${!ids[@]}"; do
+      if [[ ${samples[j]} != "${samples[i]}" ]]; then continue; fi
+      variant=
+      if [[ $label == */* ]]; then variant="${ids[j]}: "; fi
+      if [[ -n ${hints[j]} ]]; then variant+="${hints[j]} "; fi
+      printf '      \e[2m%sexpect (%s): %s\e[0m\n' "$variant" "${profiles[j]}" "$(unlinked "${targets[j]}")"
+    done
+  done
+}
+
+# Runs inside the test GUI: shows one fixture at a time and records what the click selected.
+drive() {
+  local dir=$1 run_profile=$2 i actual
+  shift 2
+  patterns=("$@")
+  for i in "${!ids[@]}"; do
+    [[ ${profiles[i]} == "$run_profile" ]] && selected "${ids[i]}" || continue
+    if [[ -n ${widths[i]} && $(tput cols) != "${widths[i]}" ]]; then
+      # The test config's user-var-changed handler resizes the window to this many columns.
+      printf '\e]1337;SetUserVar=hyperlinks_test_cols=%s\a' "$(printf %s "${widths[i]}" | base64)"
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [[ $(tput cols) == "${widths[i]}" ]] && break
+        sleep 1
+      done
+    fi
+    rm -f "$dir/receipt"
+    printf '\e[2J\e[H%s  (%s profile, %s columns)\n\n%s\n\n' "${ids[i]}" "$run_profile" "$(tput cols)" "${samples[i]}"
+    printf '\e[2m%s Command-click there. If nothing opens, press Enter.\e[0m\n' "${hints[i]:-Find the sample above.}"
+    actual=
+    while :; do
+      if [[ -f $dir/receipt ]]; then actual=$(cat "$dir/receipt"); break; fi
+      if read -r -t 1 _; then break; fi
+    done
+    printf '%s\t%s\t%s\n' "${ids[i]}" "$(tput cols)" "$actual" >>"$dir/results"
+  done
+  touch "$dir/$run_profile.done"
+}
+
+# Opens one isolated GUI for a profile and waits until its driver has recorded every receipt.
+run_gui() {
+  local dir=$1 run_profile=$2 script=$3 repo=$4 config_dir=$1/$2 gui_pid lua_patterns=''
+  local pattern
+  for pattern in "${patterns[@]}"; do lua_patterns+=", '$pattern'"; done
+  mkdir "$config_dir"
+  # Without wezterm_work.lua in DEVVM_CONFIG_DIR the shared config skips the work module.
+  [[ $run_profile == work ]] && ln -s "$repo/wezterm-work/.config/wezterm/wezterm_work.lua" "$config_dir/"
+  cat >"$dir/$run_profile.lua" <<LUA
+local wezterm = require 'wezterm'
+local config = dofile('$repo/wezterm/.config/wezterm/wezterm.lua')
+config.initial_cols, config.initial_rows = 80, 24
+-- Record the selected target instead of launching a browser.
+wezterm.on('open-uri', function(_, _, uri)
+  local path = '$dir/receipt'
+  local file = assert(io.open(path .. '.tmp', 'w'))
+  file:write(uri)
+  file:close()
+  os.rename(path .. '.tmp', path)
+  return false
+end)
+wezterm.on('user-var-changed', function(window, pane, name, value)
+  if name ~= 'hyperlinks_test_cols' then return end
+  local cells, inner = pane:get_dimensions(), window:get_dimensions()
+  local cell_width = cells.pixel_width / cells.cols
+  window:set_inner_size(math.floor(inner.pixel_width + (tonumber(value) - cells.cols) * cell_width + 0.5),
+    inner.pixel_height)
+end)
+config.default_prog = { '/bin/bash', '$script', '--drive', '$dir', '$run_profile'$lua_patterns }
+return config
+LUA
+
+  # A missing helper keeps the work module from starting the real devvm guard.
+  DEVVM_CONFIG_DIR="$config_dir" DEVVM_SOCKET_DIR="$dir/sockets" DEVVM_STATE_DIR="$dir/state" \
+    DEVVM_HELPER="$dir/bin/devvm" /Applications/WezTerm.app/Contents/MacOS/wezterm-gui \
+    --config-file "$dir/$run_profile.lua" start --always-new-process --class "hyperlinks-test-$$" \
+    >"$dir/$run_profile.log" 2>&1 &
+  gui_pid=$!
+  while kill -0 "$gui_pid" 2>/dev/null && [[ ! -f $dir/$run_profile.done ]]; do sleep 1; done
+  kill "$gui_pid" 2>/dev/null || true
+  wait "$gui_pid" 2>/dev/null || true
+  if [[ ! -f $dir/$run_profile.done ]]; then
+    printf 'FAIL: the %s test window closed before every fixture had a receipt\n' "$run_profile" >&2
+    tail -n 20 "$dir/$run_profile.log" >&2
+    exit 1
+  fi
+}
+
+manual() {
+  local script repo dir i run_profile row cols actual note checked=0 failures=0
+  script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+  repo=$(cd -- "${script%/*}/../../.." && pwd)
+  dir=$(mktemp -d /tmp/wezterm-hyperlinks-test.XXXXXX)
+  # Expand now: the EXIT trap runs after this function's locals are gone.
+  trap "rm -rf '$dir'" EXIT
+  touch "$dir/results"
+
+  for run_profile in personal work; do
+    for i in "${!ids[@]}"; do
+      if [[ ${profiles[i]} == "$run_profile" ]] && selected "${ids[i]}"; then
+        run_gui "$dir" "$run_profile" "$script" "$repo"
+        break
+      fi
+    done
+  done
+
+  for i in "${!ids[@]}"; do
+    selected "${ids[i]}" || continue
+    row=$(awk -F'\t' -v id="${ids[i]}" '$1 == id' "$dir/results")
+    IFS=$'\t' read -r _ cols actual <<<"$row"
+    note=
+    [[ -n ${widths[i]} ]] && note=" at $cols columns"
+    checked=$((checked + 1))
+    if [[ -n ${widths[i]} && $cols != "${widths[i]}" ]]; then
+      printf 'FAIL %-5s ran at %s columns instead of %s\n' "${ids[i]}" "$cols" "${widths[i]}"
+      failures=$((failures + 1))
+    elif [[ $actual == "${targets[i]}" ]]; then
+      printf 'PASS %-5s %s%s\n' "${ids[i]}" "$(unlinked "$actual")" "$note"
+    else
+      printf 'FAIL %-5s want %s, got %s%s\n' "${ids[i]}" "$(unlinked "${targets[i]}")" "$(unlinked "$actual")" "$note"
+      failures=$((failures + 1))
+    fi
+  done
+  if ((failures)); then
+    printf 'FAIL: %d of %d fixtures selected the wrong target\n' "$failures" "$checked" >&2
+    exit 1
+  fi
+  printf 'PASS: all %d fixtures selected their expected targets\n' "$checked"
+}
+
+case ${1:-} in
+  --manual) shift; (($#)) && patterns=("$@"); manual ;;
+  --emit-samples) emit_samples ;;
+  --drive) shift; drive "$@" ;;
+  *) printf 'usage: %s --manual [GLOB...] | --emit-samples\n' "$0" >&2; exit 2 ;;
+esac

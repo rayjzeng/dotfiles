@@ -31,11 +31,18 @@ config.window_frame = {
 }
 config.enable_scroll_bar = true
 
+-- Quotes and unbalanced brackets or parentheses around a URL belong to the prose or
+-- markup, and so does trailing sentence punctuation; a trailing = and balanced ()
+-- or [] (as in paths[0]=) belong to the URL.
+local url_char = '[^\\s"\'`<>()\\[\\]{}]'
+local url_end = '[^\\s"\'`<>()\\[\\]{}.,;:!?]'
+local url_group = '\\(' .. url_char .. '*\\)|\\[' .. url_char .. '*\\]'
+local url_rest = '(?:' .. url_char .. '|' .. url_group .. ')*(?:' .. url_end .. '|' .. url_group .. ')'
 config.hyperlink_rules = {
-  {
-    regex = '\\b\\w+://(?:[\\w.-]+)\\.[a-z]{2,15}\\S*\\b',
-    format = '$0',
-  },
+  -- No TLD requirement, so localhost and IP hosts match.
+  { regex = '\\b\\w+://' .. url_rest, format = '$0' },
+  -- A preceding slash or host character means the www is inside a longer URL or host.
+  { regex = '(?:^|[^/\\w.-])(www\\.[\\w-]+\\.' .. url_rest .. ')', format = 'https://$1', highlight = 1 },
 }
 
 -- TUIs can open links on press; keep both halves of Command-click in the GUI.

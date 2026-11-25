@@ -134,9 +134,23 @@ operations. Detaching a domain can remove all of its attached tabs from the GUI.
 | `Cmd+Click` | Open a recognized hyperlink |
 | `Shift+Enter` | Send a newline to the terminal application |
 
+Command-click opens URLs with any scheme, including localhost and IP hosts, and
+opens bare `www.` addresses over HTTPS. Surrounding quotes, unbalanced brackets or
+parentheses and trailing sentence punctuation (including `?`) stay out of the
+link; a trailing `=` and balanced `()` or `[]`, as in `paths[0]=`, stay in.
+Explicit OSC 8 links keep their own target.
+
+A URL wrapped by the window width opens in full from any of its rows, although
+WezTerm's hover underline may cover only part of it, and it underlines every
+other visible copy of the same URL too. A URL broken by a real newline is two
+lines of text, so only the first line opens. TUIs that wrap text themselves
+cause this: Codex breaks a long URL after its `?`, and Claude Code breaks it at
+the window edge.
+
 The work package also recognizes Meta task/diff/paste IDs and supported fbsource
-path/line references as links. Source references open in VS Code Insiders through
-the Meta source-link service.
+path/line references as links. An ID inside a full Meta URL opens the full URL.
+Source references open in VS Code Insiders through the Meta source-link service;
+only the reference is clickable, not its `-->`, `---` or `>>> Lint for` prefix.
 
 ### Scrollback and search
 
@@ -317,6 +331,20 @@ The GUI checks use private local mux servers and a separate Mac GUI. They cover
 legacy-menu cleanup, in-place reload, host/local tab selection, fresh attachment,
 detach/merge, and process preservation. Authentication is simulated; these tests
 do not exercise physical Duo/YubiKey hardware.
+
+Hyperlink recognition needs a real click, because WezTerm offers no way to run its
+rules from Lua:
+
+```sh
+bash wezterm/.config/wezterm/hyperlinks.test --manual          # every fixture
+bash wezterm/.config/wezterm/hyperlinks.test --manual 'R*'     # IDs matching a glob
+bash wezterm/.config/wezterm/hyperlinks.test --emit-samples    # print for a TUI check
+```
+
+`--manual` opens a test window for the personal and then the work profile and
+shows one fixture at a time. Command-click where the hint says, and press Enter
+if nothing opens. The test records the URL each click selects instead of
+opening a browser, then reports PASS or FAIL per fixture.
 
 For implementation history and the footer diagnosis, see the
 [handoff](../wezterm/docs/handoffs/wezterm-devservers-handoff-v1.md),
