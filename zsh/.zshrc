@@ -292,10 +292,6 @@ alias g=git
 alias cl=claude
 
 alias cx='codex -p default'
-alias cxa='codex -p architect'
-alias cxb='codex -p implement'
-alias cxc='codex -p precise'
-alias cxd='codex -p chore'
 
 # python venv
 function activate() {
