@@ -41,7 +41,7 @@ Git setup, terminal keybindings, and plugin installation. Homebrew profiles are
 | `wezterm` | Native bottom Powerline tab bar, domain colors, pane navigation, search, and scrollback tools |
 | `wezterm-work` | Enkaku connections, persistent server sessions, host picker, and the `devvm` CLI with zsh completion |
 | `git-homedir` | Git configuration; apply with the [Git setup guide](.claude/skills/git-homedir-setup/SKILL.md) to preserve local settings |
-| `codex`, `codex-profiles` | Shared status-line tooling and optional profiles; selected by the environment setup guide |
+| `codex` | Shared Codex status-line tooling |
 
 Vim is the editor currently used and tested. The shared configuration also
 recognizes Neovim and chooses its plugin directory accordingly.

@@ -63,8 +63,7 @@ is a laptop merely because a WezTerm executable is visible.
    - For Claude Code, ensure `jq` is installed and use the
      `claude-status-line-setup` skill. Preserve unrelated settings.
    - For Codex, use the `codex-status-line-setup` skill. The `codex` package
-     contains shared status-line tooling only. The optional `codex-profiles`
-     package is selected by the environment reference.
+     contains shared status-line tooling.
 7. Apply WezTerm configuration only when the selected environment enables it.
    Before stowing, create `~/.config/wezterm` and use
    `stow --no-folding wezterm` so the downloaded `wezterm.sh` stays outside the

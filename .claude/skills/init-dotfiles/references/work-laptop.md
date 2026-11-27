@@ -24,6 +24,4 @@ macOS-specific directive; `AddKeysToAgent` itself is portable OpenSSH.
 - If WezTerm is installed and used locally, stow its config together with the
   `wezterm-work` package (Enkaku devserver sessions and the `devvm` CLI) and
   download `wezterm.sh`. See `wezterm-work/README.md` for first-run steps.
-- Stow the shared `codex` package, but skip `codex-profiles` because Meta Codex
-  uses its default model for all tasks. If explicitly asked, use
-  `stow --no-folding codex-profiles`.
+- Stow the shared `codex` package for status-line tooling.

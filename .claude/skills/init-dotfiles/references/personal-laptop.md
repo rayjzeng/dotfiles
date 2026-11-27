@@ -35,5 +35,3 @@ whole SSH config.
 ## Optional Components
 
 - If WezTerm is installed, stow its config and download `wezterm.sh`.
-- Ask whether to run `stow --no-folding codex-profiles`; do not assume task
-  profiles are wanted.

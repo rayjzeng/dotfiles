@@ -27,8 +27,5 @@ server.
 
 - Skip WezTerm configuration and shell-integration downloads even if a
   WezTerm wrapper or executable is visible remotely.
-- Stow the shared `codex` package for status-line tooling, but never stow
-  `codex-profiles` unless explicitly requested. If requested, use
-  `stow --no-folding codex-profiles`. Meta Codex uses its default model for all
-  tasks.
+- Stow the shared `codex` package for status-line tooling.
 - Configure zkbd for the host terminal and its tmux/screen variants.

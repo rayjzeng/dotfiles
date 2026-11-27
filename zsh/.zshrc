@@ -297,7 +297,7 @@ alias g=git
 # agentic tools
 alias cl=claude
 
-alias cx='codex -p default'
+alias cx=codex
 
 # python venv
 function activate() {
