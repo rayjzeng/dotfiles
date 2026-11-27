@@ -25,8 +25,14 @@ fi
 function _wezterm_signal_remote {
   if [[ -n "$IS_REMOTE" ]]; then
     printf '\033]1337;SetUserVar=IS_REMOTE=MQ==\007'
+    if [[ -z "$_wezterm_encoded_hostname" && -n "$HOST" ]]; then
+      typeset -g _wezterm_encoded_hostname=$(printf '%s' "$HOST" | base64 | tr -d '\r\n')
+    fi
+    if [[ -n "$_wezterm_encoded_hostname" ]]; then
+      printf '\033]1337;SetUserVar=REMOTE_HOST=%s\007' "$_wezterm_encoded_hostname"
+    fi
   else
-    printf '\033]1337;SetUserVar=IS_REMOTE=MA==\007'
+    printf '\033]1337;SetUserVar=IS_REMOTE=MA==\007\033]1337;SetUserVar=REMOTE_HOST=\007'
   fi
 }
 autoload -Uz add-zsh-hook

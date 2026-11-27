@@ -12,7 +12,11 @@ end
 
 config.color_scheme = 'Dracula (Official)'
 
-config.font = wezterm.font('JetBrainsMono Nerd Font Mono')
+config.font = wezterm.font_with_fallback {
+  'JetBrainsMono Nerd Font Mono',
+  'JetBrains Mono',
+  'Symbols Nerd Font Mono',
+}
 config.font_size = 12.0
 
 config.scrollback_lines = 20000
@@ -194,6 +198,117 @@ local function resolve_tab_title(tab)
 end
 
 local tab_background = '#282a36'
+
+-- System counters describe the machine running the WezTerm GUI.
+local function command_output(args)
+  local ok, output = wezterm.run_child_process(args)
+  return ok and output or ''
+end
+
+local function read_system_file(path)
+  local file = io.open(path, 'r')
+  if not file then return '' end
+  local contents = file:read('*a')
+  file:close()
+  return contents
+end
+
+local previous_cpu_total, previous_cpu_idle
+local function cpu_usage()
+  if wezterm.target_triple:find('apple', 1, true) then
+    local cores = tonumber(command_output { '/usr/sbin/sysctl', '-n', 'hw.logicalcpu' })
+    if not cores or cores < 1 then return end
+    -- macOS ps reports recent CPU usage as a percentage of a single core.
+    local usage, output = 0, command_output { '/bin/ps', '-A', '-o', '%cpu=' }
+    for value in output:gmatch('%S+') do
+      usage = usage + (tonumber(value) or 0)
+    end
+    if output ~= '' then return math.min(100, usage / cores) end
+    return
+  end
+
+  local counters = read_system_file('/proc/stat'):match('^cpu%s+([^\n]+)')
+  if not counters then return end
+  local total, idle, index = 0, 0, 0
+  for value in counters:gmatch('%d+') do
+    index = index + 1
+    if index > 8 then break end -- Guest time is already included in user time.
+    total = total + tonumber(value)
+    if index == 4 or index == 5 then idle = idle + tonumber(value) end
+  end
+  local elapsed = previous_cpu_total and total - previous_cpu_total
+  local busy = elapsed and elapsed - (idle - previous_cpu_idle)
+  previous_cpu_total, previous_cpu_idle = total, idle
+  if elapsed and elapsed > 0 then return math.max(0, math.min(100, 100 * busy / elapsed)) end
+end
+
+local function memory_usage()
+  if wezterm.target_triple:find('apple', 1, true) then
+    local stats = command_output { '/usr/bin/vm_stat' }
+    local function pages(label)
+      return tonumber(stats:match(label .. ':%s*(%d+)')) or 0
+    end
+    local used = pages('Pages wired down') + pages('Pages occupied by compressor')
+      + pages('Anonymous pages') - pages('Pages purgeable')
+    local page_size = tonumber(stats:match('page size of (%d+)'))
+    local bytes = tonumber(command_output { '/usr/sbin/sysctl', '-n', 'hw.memsize' })
+    if page_size and bytes and bytes > 0 then
+      return math.max(0, math.min(100, 100 * used * page_size / bytes))
+    end
+    return
+  end
+
+  local stats = read_system_file('/proc/meminfo')
+  local total = tonumber(stats:match('MemTotal:%s*(%d+)'))
+  local available = tonumber(stats:match('MemAvailable:%s*(%d+)'))
+  if total and total > 0 and available then return 100 * (total - available) / total end
+end
+
+local function remote_host(pane)
+  if not pane_is_remote(pane) then return end
+  local vars = pane:get_user_vars()
+  local cwd = pane:get_current_working_dir()
+  local host = vars.REMOTE_HOST
+  if not host or host == '' then
+    local cwd_host = cwd and cwd.host
+    if cwd_host and cwd_host ~= '' and cwd_host ~= wezterm.hostname() then host = cwd_host end
+  end
+  if not host or host == '' then
+    local domain = pane:get_domain_name()
+    host = domain ~= 'local' and domain ~= 'TermWizTerminalDomain' and domain or 'SSH'
+  end
+  return host:gsub('[^%w_.:@%-]', ''):sub(1, 32)
+end
+
+local last_sample, system_status
+wezterm.on('update-status', guarded('system-status', function(window, pane)
+  local now = os.time()
+  if not last_sample or now - last_sample >= 5 then
+    last_sample = now
+    local cpu, memory = cpu_usage(), memory_usage()
+    local disk = command_output { 'df', '-Pk', wezterm.home_dir }:match('(%d+%%)%s+/')
+    system_status = {}
+    if cpu then table.insert(system_status, (' %.0f%%'):format(cpu)) end
+    if memory then table.insert(system_status, (' %.0f%%'):format(memory)) end
+    if disk then table.insert(system_status, ' ' .. disk) end
+  end
+
+  local status, background = {}, tab_background
+  local function segment(text, color)
+    table.insert(status, { Background = { Color = background } })
+    table.insert(status, { Foreground = { Color = color } })
+    table.insert(status, { Text = '' })
+    table.insert(status, { Background = { Color = color } })
+    table.insert(status, { Foreground = { Color = '#f8f8f2' } })
+    table.insert(status, { Text = ' ' .. text .. ' ' })
+    background = color
+  end
+
+  local host = remote_host(pane)
+  if host and host ~= '' then segment('󰣀 ' .. host, '#594779') end
+  if #system_status > 0 then segment(table.concat(system_status, '  '), '#41475d') end
+  window:set_right_status(wezterm.format(status))
+end))
 local domain_colors = { '#8be9fd', '#bd93f9', '#50fa7b', '#ffb86c', '#ff79c6', '#82aaff', '#f1fa8c' }
 
 local function domain_color(key, index)
